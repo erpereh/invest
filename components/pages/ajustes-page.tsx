@@ -39,14 +39,14 @@ export function AjustesPage() {
 
       <div className="max-w-2xl flex flex-col gap-4">
         {sections.map((section) => (
-          <div key={section.title} className="bg-surface-1 border border-border/60 rounded-2xl overflow-hidden">
+          <div key={section.title} className="bg-surface-1 border border-border/70 rounded-2xl overflow-hidden shadow-[0_14px_36px_oklch(0_0_0/0.22)] transition-[background-color,border-color,box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:border-border hover:shadow-[0_18px_44px_oklch(0_0_0/0.3)]">
             <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider px-5 pt-4 pb-2">{section.title}</p>
             {section.items.map((item, i) => {
               const Icon = item.icon
               return (
                 <button
                   key={item.label}
-                  className={`w-full flex items-center justify-between px-5 py-3.5 hover:bg-surface-2/60 transition-colors text-left ${
+                  className={`w-full flex items-center justify-between px-5 py-3.5 hover:bg-surface-2/70 transition-colors duration-150 ease-out text-left ${
                     i < section.items.length - 1 ? 'border-b border-border/30' : ''
                   }`}
                 >
@@ -69,7 +69,7 @@ export function AjustesPage() {
         ))}
 
         {/* App info */}
-        <div className="bg-surface-1 border border-border/60 rounded-2xl p-5">
+        <div className="bg-surface-1 border border-border/70 rounded-2xl p-5 shadow-[0_14px_36px_oklch(0_0_0/0.22)] transition-[background-color,border-color,box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:border-border hover:shadow-[0_18px_44px_oklch(0_0_0/0.3)]">
           <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-3">Acerca de</p>
           <div className="flex flex-col gap-2">
             <div className="flex justify-between text-xs">

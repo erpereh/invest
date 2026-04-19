@@ -26,7 +26,7 @@ export function CarteraPage() {
         {stats.map((s) => {
           const Icon = s.icon
           return (
-            <div key={s.label} className="bg-surface-1 border border-border/60 rounded-2xl p-4">
+            <div key={s.label} className="bg-surface-1 border border-border/70 rounded-2xl p-4 shadow-[0_14px_36px_oklch(0_0_0/0.22)] transition-[background-color,border-color,box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:border-border hover:shadow-[0_18px_44px_oklch(0_0_0/0.3)]">
               <div className="flex items-center gap-2 mb-2">
                 <Icon className={cn('w-3.5 h-3.5', s.color)} />
                 <span className="text-xs text-muted-foreground">{s.label}</span>

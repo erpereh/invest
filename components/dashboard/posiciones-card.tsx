@@ -6,16 +6,16 @@ import { positions } from '@/lib/mock-data'
 
 const typeBadgeColors: Record<string, string> = {
   ETF: 'bg-blue-muted text-blue-accent',
-  Acción: 'bg-surface-3 text-muted-foreground',
+  Acción: 'bg-surface-3 text-foreground',
   Fondo: 'bg-[oklch(0.25_0.06_145)] text-gain',
 }
 
 export function PosicionesCard() {
   return (
-    <div className="bg-surface-1 border border-border/60 rounded-2xl p-5 flex flex-col gap-4">
+    <div className="bg-surface-1 border border-border/70 rounded-2xl p-5 flex flex-col gap-4 shadow-[0_14px_36px_oklch(0_0_0/0.22)] transition-[background-color,border-color,box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:border-border hover:shadow-[0_18px_44px_oklch(0_0_0/0.3)]">
       <div className="flex items-center justify-between">
         <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Posiciones</p>
-        <button className="text-xs text-primary hover:text-primary/80 transition-colors font-medium flex items-center gap-1">
+        <button className="text-xs text-primary hover:text-primary/85 transition-colors duration-150 ease-out font-medium flex items-center gap-1">
           Ver todas <ExternalLink className="w-3 h-3" />
         </button>
       </div>
@@ -41,7 +41,7 @@ export function PosicionesCard() {
                 <tr
                   key={pos.id}
                   className={cn(
-                    'group transition-colors hover:bg-surface-2/60',
+                    'group transition-colors duration-150 ease-out hover:bg-surface-2/70',
                     i < positions.length - 1 && 'border-b border-border/20'
                   )}
                 >
@@ -57,7 +57,7 @@ export function PosicionesCard() {
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
                           <span className="font-semibold text-foreground">{pos.ticker}</span>
-                          <span className={cn('px-1.5 py-0.5 rounded-md text-[10px] font-medium', typeBadgeColors[pos.type] ?? 'bg-surface-3 text-muted-foreground')}>
+                          <span className={cn('px-1.5 py-0.5 rounded-md text-[10px] font-medium transition-colors duration-150 ease-out', typeBadgeColors[pos.type] ?? 'bg-surface-3 text-foreground')}>
                             {pos.type}
                           </span>
                         </div>
@@ -100,7 +100,7 @@ export function PosicionesCard() {
                     </div>
                     <div className={cn(
                       'text-[10px]',
-                      isPositive ? 'text-gain/70' : 'text-loss/70'
+                      isPositive ? 'text-gain/85' : 'text-loss/85'
                     )}>
                       {isPositive ? '+' : ''}{pos.returnAbs.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}
                     </div>

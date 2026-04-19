@@ -34,7 +34,7 @@ const ranges = [
 const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ value: number }> }) => {
   if (active && payload && payload.length) {
     return (
-      <div className="bg-surface-2 border border-border/60 rounded-xl px-3 py-2 shadow-xl">
+      <div className="bg-surface-2 border border-border/70 rounded-xl px-3 py-2 shadow-xl">
         <p className="text-xs font-semibold text-foreground">
           {payload[0].value.toLocaleString('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })}
         </p>
@@ -50,7 +50,7 @@ export function PatrimonioCard() {
   const isPositive = dailyChangePct >= 0
 
   return (
-    <div className="bg-surface-1 border border-border/60 rounded-2xl p-5 flex flex-col gap-4">
+    <div className="bg-surface-1 border border-border/70 rounded-2xl p-5 flex flex-col gap-4 shadow-[0_14px_36px_oklch(0_0_0/0.22)] transition-[background-color,border-color,box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:border-border hover:shadow-[0_18px_44px_oklch(0_0_0/0.3)]">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
@@ -119,10 +119,10 @@ export function PatrimonioCard() {
             key={r.label}
             onClick={() => setActiveRange(r.label)}
             className={cn(
-              'flex-1 py-1 rounded-lg text-xs font-medium transition-all',
+              'flex-1 py-1 rounded-lg text-xs font-medium transition-[background-color,color,box-shadow] duration-150 ease-out',
               activeRange === r.label
-                ? 'bg-primary/15 text-primary'
-                : 'text-muted-foreground hover:text-foreground hover:bg-surface-3/60'
+                ? 'bg-primary/18 text-primary shadow-sm'
+                : 'text-muted-foreground hover:text-foreground hover:bg-surface-3/75'
             )}
           >
             {r.label}

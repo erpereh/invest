@@ -31,7 +31,7 @@ export function DividendosPage() {
         {stats.map((s) => {
           const Icon = s.icon
           return (
-            <div key={s.label} className="bg-surface-1 border border-border/60 rounded-2xl p-4">
+            <div key={s.label} className="bg-surface-1 border border-border/70 rounded-2xl p-4 shadow-[0_14px_36px_oklch(0_0_0/0.22)] transition-[background-color,border-color,box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:border-border hover:shadow-[0_18px_44px_oklch(0_0_0/0.3)]">
               <div className="flex items-center gap-2 mb-2">
                 <Icon className={cn('w-3.5 h-3.5', s.color)} />
                 <span className="text-xs text-muted-foreground">{s.label}</span>
@@ -44,17 +44,17 @@ export function DividendosPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Upcoming dividends */}
-        <div className="bg-surface-1 border border-border/60 rounded-2xl p-5 flex flex-col gap-4">
+        <div className="bg-surface-1 border border-border/70 rounded-2xl p-5 flex flex-col gap-4 shadow-[0_14px_36px_oklch(0_0_0/0.22)] transition-[background-color,border-color,box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:border-border hover:shadow-[0_18px_44px_oklch(0_0_0/0.3)]">
           <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Próximos pagos estimados</p>
           <div className="flex flex-col gap-3">
             {dividends.map((d) => (
-              <div key={d.id} className="flex items-center justify-between p-3 bg-surface-2/40 rounded-xl hover:bg-surface-2 transition-colors">
+              <div key={d.id} className="flex items-center justify-between p-3 bg-surface-2/55 rounded-xl hover:bg-surface-2 transition-colors duration-150 ease-out">
                 <div className="flex flex-col gap-0.5">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-semibold text-foreground">{d.asset}</span>
                     <span className={cn(
                       'text-[10px] px-1.5 py-0.5 rounded font-medium',
-                      d.status === 'Estimado' ? 'bg-blue-muted text-blue-accent' : 'bg-surface-3 text-muted-foreground'
+                      d.status === 'Estimado' ? 'bg-blue-muted text-blue-accent' : 'bg-surface-3 text-foreground'
                     )}>
                       {d.status}
                     </span>
@@ -78,16 +78,16 @@ export function DividendosPage() {
         </div>
 
         {/* Annual chart */}
-        <div className="bg-surface-1 border border-border/60 rounded-2xl p-5 flex flex-col gap-4">
+        <div className="bg-surface-1 border border-border/70 rounded-2xl p-5 flex flex-col gap-4 shadow-[0_14px_36px_oklch(0_0_0/0.22)] transition-[background-color,border-color,box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:border-border hover:shadow-[0_18px_44px_oklch(0_0_0/0.3)]">
           <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Dividendos anuales</p>
           <div className="h-48">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={annualData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                <XAxis dataKey="year" tick={{ fontSize: 11, fill: 'oklch(0.5 0 0)' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: 'oklch(0.5 0 0)' }} axisLine={false} tickLine={false} />
+                <XAxis dataKey="year" tick={{ fontSize: 11, fill: 'oklch(0.72 0.014 255)' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: 'oklch(0.72 0.014 255)' }} axisLine={false} tickLine={false} />
                 <Tooltip
                   formatter={(val: number) => [`${val.toFixed(2)} €`, 'Total']}
-                  contentStyle={{ background: 'oklch(0.14 0 0)', border: '1px solid oklch(0.18 0 0)', borderRadius: '12px', fontSize: '12px' }}
+                  contentStyle={{ background: 'oklch(0.18 0.014 255)', border: '1px solid oklch(0.255 0.014 255)', borderRadius: '12px', fontSize: '12px' }}
                 />
                 <Bar dataKey="total" radius={[6, 6, 2, 2]}>
                   {annualData.map((_, i) => (

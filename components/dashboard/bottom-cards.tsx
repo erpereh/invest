@@ -14,7 +14,7 @@ const MonthlyTooltip = ({ active, payload }: { active?: boolean; payload?: Array
   if (active && payload && payload.length) {
     const v = payload[0].value
     return (
-      <div className="bg-surface-2 border border-border/60 rounded-xl px-2.5 py-1.5 shadow-xl">
+      <div className="bg-surface-2 border border-border/70 rounded-xl px-2.5 py-1.5 shadow-xl">
         <p className={cn('text-xs font-semibold', v >= 0 ? 'text-gain' : 'text-loss')}>
           {v >= 0 ? '+' : ''}{v.toFixed(2)}%
         </p>
@@ -26,7 +26,7 @@ const MonthlyTooltip = ({ active, payload }: { active?: boolean; payload?: Array
 
 export function MejoresPeoresCard() {
   return (
-    <div className="bg-surface-1 border border-border/60 rounded-2xl p-5 flex flex-col gap-4">
+    <div className="bg-surface-1 border border-border/70 rounded-2xl p-5 flex flex-col gap-4 shadow-[0_14px_36px_oklch(0_0_0/0.22)] transition-[background-color,border-color,box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:border-border hover:shadow-[0_18px_44px_oklch(0_0_0/0.3)]">
       <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Mejores y peores</p>
       <div className="flex flex-col gap-3">
         <div>
@@ -75,7 +75,7 @@ export function MejoresPeoresCard() {
 
 export function ProximosDividendosCard() {
   return (
-    <div className="bg-surface-1 border border-border/60 rounded-2xl p-5 flex flex-col gap-4">
+    <div className="bg-surface-1 border border-border/70 rounded-2xl p-5 flex flex-col gap-4 shadow-[0_14px_36px_oklch(0_0_0/0.22)] transition-[background-color,border-color,box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:border-border hover:shadow-[0_18px_44px_oklch(0_0_0/0.3)]">
       <div className="flex items-center gap-2">
         <CalendarClock className="w-3.5 h-3.5 text-primary" />
         <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Próximos dividendos</p>
@@ -88,7 +88,7 @@ export function ProximosDividendosCard() {
                 <span className="text-xs font-semibold text-foreground">{d.asset}</span>
                 <span className={cn(
                   'text-[10px] px-1.5 py-0.5 rounded-md font-medium',
-                  d.status === 'Estimado' ? 'bg-blue-muted text-blue-accent' : 'bg-surface-3 text-muted-foreground'
+                  d.status === 'Estimado' ? 'bg-blue-muted text-blue-accent' : 'bg-surface-3 text-foreground'
                 )}>
                   {d.status}
                 </span>
@@ -112,7 +112,7 @@ export function RentabilidadMensualCard() {
   const ytdTotal = monthlyReturns.reduce((acc, m) => acc + m.value, 0)
 
   return (
-    <div className="bg-surface-1 border border-border/60 rounded-2xl p-5 flex flex-col gap-4">
+    <div className="bg-surface-1 border border-border/70 rounded-2xl p-5 flex flex-col gap-4 shadow-[0_14px_36px_oklch(0_0_0/0.22)] transition-[background-color,border-color,box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:border-border hover:shadow-[0_18px_44px_oklch(0_0_0/0.3)]">
       <div className="flex items-center justify-between">
         <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Rentabilidad mensual</p>
         <div className={cn('text-sm font-bold', ytdTotal >= 0 ? 'text-gain' : 'text-loss')}>
@@ -123,8 +123,8 @@ export function RentabilidadMensualCard() {
       <div className="h-28">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={monthlyReturns} margin={{ top: 0, right: 0, left: 0, bottom: 0 }} barCategoryGap="30%">
-            <XAxis dataKey="month" tick={{ fontSize: 10, fill: 'oklch(0.5 0 0)' }} axisLine={false} tickLine={false} />
-            <Tooltip content={<MonthlyTooltip />} cursor={{ fill: 'oklch(0.17 0 0)' }} />
+            <XAxis dataKey="month" tick={{ fontSize: 10, fill: 'oklch(0.72 0.014 255)' }} axisLine={false} tickLine={false} />
+            <Tooltip content={<MonthlyTooltip />} cursor={{ fill: 'oklch(0.225 0.016 255)' }} />
             <Bar dataKey="value" radius={[4, 4, 2, 2]}>
               {monthlyReturns.map((entry, index) => (
                 <Cell

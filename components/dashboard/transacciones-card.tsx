@@ -11,7 +11,7 @@ const typeConfig: Record<string, { icon: React.ElementType; color: string; bg: s
   Compra: { icon: ArrowUpCircle, color: 'text-gain', bg: 'bg-gain-muted' },
   Venta: { icon: ArrowDownCircle, color: 'text-loss', bg: 'bg-loss-muted' },
   Dividendo: { icon: DollarSign, color: 'text-blue-accent', bg: 'bg-blue-muted' },
-  Comisión: { icon: MinusCircle, color: 'text-muted-foreground', bg: 'bg-surface-3' },
+  Comisión: { icon: MinusCircle, color: 'text-foreground', bg: 'bg-surface-3' },
   Ingreso: { icon: ArrowDownToLine, color: 'text-gain', bg: 'bg-gain-muted' },
   Retirada: { icon: ArrowUpFromLine, color: 'text-loss', bg: 'bg-loss-muted' },
 }
@@ -27,11 +27,11 @@ export function TransaccionesCard() {
   })
 
   return (
-    <div className="bg-surface-1 border border-border/60 rounded-2xl p-5 flex flex-col gap-4">
+    <div className="bg-surface-1 border border-border/70 rounded-2xl p-5 flex flex-col gap-4 shadow-[0_14px_36px_oklch(0_0_0/0.22)] transition-[background-color,border-color,box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:border-border hover:shadow-[0_18px_44px_oklch(0_0_0/0.3)]">
       {/* Header */}
       <div className="flex items-center justify-between">
         <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Transacciones recientes</p>
-        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-primary/10 text-primary hover:bg-primary/20 transition-all">
+        <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-primary/10 text-primary hover:bg-primary/20 transition-[background-color,color,box-shadow,transform] duration-150 ease-out hover:-translate-y-px">
           <Plus className="w-3.5 h-3.5" />
           Nueva transacción
         </button>
@@ -45,10 +45,10 @@ export function TransaccionesCard() {
               key={f}
               onClick={() => setActiveFilter(f)}
               className={cn(
-                'px-2.5 py-1 rounded-lg text-xs font-medium transition-all',
+                'px-2.5 py-1 rounded-lg text-xs font-medium transition-[background-color,color,box-shadow] duration-150 ease-out',
                 activeFilter === f
-                  ? 'bg-primary/15 text-primary'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-surface-3/60'
+                  ? 'bg-primary/18 text-primary shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-surface-3/75'
               )}
             >
               {f}
@@ -87,7 +87,7 @@ export function TransaccionesCard() {
                 <tr
                   key={t.id}
                   className={cn(
-                    'group transition-colors hover:bg-surface-2/60',
+                    'group transition-colors duration-150 ease-out hover:bg-surface-2/70',
                     i < filtered.length - 1 && 'border-b border-border/20'
                   )}
                 >

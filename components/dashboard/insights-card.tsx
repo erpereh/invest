@@ -51,7 +51,7 @@ export function InsightsCard() {
   }
 
   return (
-    <div className="bg-surface-1 border border-border/60 rounded-2xl p-5 flex flex-col gap-4 h-full">
+    <div className="bg-surface-1 border border-border/70 rounded-2xl p-5 flex flex-col gap-4 h-full shadow-[0_14px_36px_oklch(0_0_0/0.22)] transition-[background-color,border-color,box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:border-border hover:shadow-[0_18px_44px_oklch(0_0_0/0.3)]">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Sparkles className="w-3.5 h-3.5 text-primary" />
@@ -60,7 +60,7 @@ export function InsightsCard() {
         <button
           onClick={handleGenerate}
           className={cn(
-            'flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-all',
+            'flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-[background-color,color,box-shadow,transform] duration-150 ease-out hover:-translate-y-px',
             loading && 'opacity-70 cursor-not-allowed'
           )}
           disabled={loading}
@@ -74,7 +74,7 @@ export function InsightsCard() {
         {insights.map((item, i) => {
           const Icon = item.icon
           return (
-            <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-surface-2/50 hover:bg-surface-2 transition-colors">
+            <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-surface-2/55 hover:bg-surface-2 transition-colors duration-150 ease-out">
               <div className={cn('p-1.5 rounded-lg shrink-0 mt-0.5', item.bg)}>
                 <Icon className={cn('w-3 h-3', item.color)} />
               </div>
