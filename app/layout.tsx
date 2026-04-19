@@ -1,32 +1,15 @@
 import type { Metadata } from 'next'
-import { Geist, Geist_Mono } from 'next/font/google'
-import { Analytics } from '@vercel/analytics/next'
+import { Inter } from 'next/font/google'
 import './globals.css'
 
-const _geist = Geist({ subsets: ["latin"] });
-const _geistMono = Geist_Mono({ subsets: ["latin"] });
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
+})
 
 export const metadata: Metadata = {
-  title: 'Invest - Dashboard de Inversiones',
-  description: 'Gestiona tu cartera de inversiones con una interfaz premium y moderna',
-  generator: 'v0.app',
-  icons: {
-    icon: [
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
-    ],
-    apple: '/apple-icon.png',
-  },
+  title: 'Invest — Seguimiento de Cartera',
+  description: 'Dashboard privado de seguimiento de inversiones y patrimonio',
 }
 
 export default function RootLayout({
@@ -35,10 +18,9 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="es" className="dark bg-background">
-      <body className="font-sans antialiased min-h-screen bg-background">
+    <html lang="es" className="bg-background">
+      <body className={`${inter.variable} font-sans antialiased`}>
         {children}
-        {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>
   )
