@@ -46,8 +46,8 @@
 }
 
 @theme inline {
-  --font-sans: 'Inter', 'Inter Fallback';
-  --font-mono: 'Geist Mono', 'Geist Mono Fallback';
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -113,5 +113,11 @@
   }
   ::-webkit-scrollbar-thumb:hover {
     background: oklch(0.4 0.014 255);
+  }
+}
+
+@layer components {
+  .input-like {
+    @apply bg-surface-1 border border-border rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary/35;
   }
 }

@@ -1,53 +1,33 @@
 'use client'
 
-import { useState } from 'react'
-import { Sparkles, AlertTriangle, TrendingUp, Globe, Zap, RefreshCw } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Sparkles, AlertTriangle, TrendingUp, Globe, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import type { PortfolioDashboardData } from '@/lib/data/portfolio'
+import { formatPercent } from '@/lib/data/format'
 
-const insights = [
-  {
-    icon: AlertTriangle,
-    color: 'text-yellow-500',
-    bg: 'bg-yellow-500/10',
-    title: 'Concentración elevada',
-    desc: 'IWDA representa el 30.9% de la cartera. Considera diversificar si supera el 35%.',
-  },
-  {
-    icon: TrendingUp,
-    color: 'text-gain',
-    bg: 'bg-gain-muted',
-    title: 'Mejor rendimiento',
-    desc: 'MSFT lidera con un +22.15%. Apple y VWCE también superan el benchmark anual.',
-  },
-  {
-    icon: Globe,
-    color: 'text-blue-accent',
-    bg: 'bg-blue-muted',
-    title: 'Exposición EEUU: 55.3%',
-    desc: 'Alta dependencia al mercado americano. Los mercados emergentes solo pesan un 9.5%.',
-  },
-  {
-    icon: AlertTriangle,
-    color: 'text-loss',
-    bg: 'bg-loss-muted',
-    title: 'Posición en pérdidas',
-    desc: 'BRK.B y EIMI están por debajo del precio de compra. Evalúa tu tesis de inversión.',
-  },
-  {
-    icon: Zap,
-    color: 'text-yellow-400',
-    bg: 'bg-yellow-400/10',
-    title: 'Dividendos próximos',
-    desc: 'AAPL paga dividendo el 15 may. MSFT y VWCE en junio-julio.',
-  },
-]
+interface InsightsCardProps {
+  data: PortfolioDashboardData
+}
 
-export function InsightsCard() {
+export function InsightsCard({ data }: InsightsCardProps) {
   const [loading, setLoading] = useState(false)
+  const [remoteInsight, setRemoteInsight] = useState<string | null>(null)
 
-  const handleGenerate = () => {
+  const insights = useMemo(() => buildInsights(data), [data])
+
+  async function handleGenerate() {
     setLoading(true)
-    setTimeout(() => setLoading(false), 1500)
+    setRemoteInsight(null)
+    const response = await fetch('/api/ai/portfolio-analysis', { method: 'POST' })
+    const result = await response.json()
+    setLoading(false)
+    if (!response.ok || !result.ok) {
+      setRemoteInsight(result.error ?? 'No se pudo generar el analisis.')
+      return
+    }
+    const first = result.analysis?.insights?.[0]
+    setRemoteInsight(first ? `${first.title}: ${first.description}` : 'Analisis generado sin observaciones relevantes.')
   }
 
   return (
@@ -59,22 +39,21 @@ export function InsightsCard() {
         </div>
         <button
           onClick={handleGenerate}
-          className={cn(
-            'flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-[background-color,color,box-shadow,transform] duration-150 ease-out hover:-translate-y-px',
-            loading && 'opacity-70 cursor-not-allowed'
-          )}
+          className={cn('flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-[background-color,color,box-shadow,transform] duration-150 ease-out hover:-translate-y-px', loading && 'opacity-70 cursor-not-allowed')}
           disabled={loading}
         >
           <RefreshCw className={cn('w-3 h-3', loading && 'animate-spin')} />
-          {loading ? 'Analizando…' : 'Actualizar'}
+          {loading ? 'Analizando...' : 'IA'}
         </button>
       </div>
 
+      {remoteInsight ? <div className="text-[11px] text-primary bg-primary/10 rounded-xl p-3">{remoteInsight}</div> : null}
+
       <div className="flex flex-col gap-3 flex-1">
-        {insights.map((item, i) => {
+        {insights.map((item, index) => {
           const Icon = item.icon
           return (
-            <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-surface-2/55 hover:bg-surface-2 transition-colors duration-150 ease-out">
+            <div key={index} className="flex items-start gap-3 p-3 rounded-xl bg-surface-2/55 hover:bg-surface-2 transition-colors duration-150 ease-out">
               <div className={cn('p-1.5 rounded-lg shrink-0 mt-0.5', item.bg)}>
                 <Icon className={cn('w-3 h-3', item.color)} />
               </div>
@@ -88,4 +67,46 @@ export function InsightsCard() {
       </div>
     </div>
   )
+}
+
+function buildInsights(data: PortfolioDashboardData) {
+  const topHolding = data.holdings[0]
+  const worstHolding = [...data.holdings].sort((a, b) => Number(a.pnl_pct ?? 0) - Number(b.pnl_pct ?? 0))[0]
+  const topRegion = data.groupedDistribution.regions[0]
+
+  return [
+    {
+      icon: AlertTriangle,
+      color: topHolding && calculateWeight(topHolding, data) > 35 ? 'text-yellow-500' : 'text-blue-accent',
+      bg: topHolding && calculateWeight(topHolding, data) > 35 ? 'bg-yellow-500/10' : 'bg-blue-muted',
+      title: topHolding ? `Mayor peso: ${topHolding.isin}` : 'Sin posiciones valoradas',
+      desc: topHolding ? `${topHolding.fund_name} pesa ${calculateWeight(topHolding, data).toFixed(1)}% de la cartera.` : 'Importa movimientos y NAVs para generar lectura de concentracion.',
+    },
+    {
+      icon: TrendingUp,
+      color: 'text-gain',
+      bg: 'bg-gain-muted',
+      title: `Rentabilidad total ${formatPercent(data.summary.total_pnl_pct)}`,
+      desc: `P/L acumulado: ${data.summary.total_pnl_eur.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })}.`,
+    },
+    {
+      icon: Globe,
+      color: 'text-blue-accent',
+      bg: 'bg-blue-muted',
+      title: topRegion ? `Region principal: ${topRegion.name}` : 'Distribucion pendiente',
+      desc: topRegion ? `${topRegion.name} concentra el ${topRegion.value.toFixed(1)}% del valor.` : 'No hay holdings suficientes para calcular regiones.',
+    },
+    {
+      icon: AlertTriangle,
+      color: worstHolding && Number(worstHolding.pnl_eur) < 0 ? 'text-loss' : 'text-muted-foreground',
+      bg: worstHolding && Number(worstHolding.pnl_eur) < 0 ? 'bg-loss-muted' : 'bg-surface-3',
+      title: worstHolding ? `Peor posicion: ${worstHolding.isin}` : 'Sin perdidas detectadas',
+      desc: worstHolding ? `${worstHolding.fund_name}: ${formatPercent(worstHolding.pnl_pct)}.` : 'No hay posiciones para comparar.',
+    },
+  ]
+}
+
+function calculateWeight(holding: { market_value: number }, data: PortfolioDashboardData) {
+  const total = data.summary.total_market_value
+  return total > 0 ? (Number(holding.market_value) / total) * 100 : 0
 }
