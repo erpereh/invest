@@ -20,7 +20,6 @@ const navItems = [
   { id: 'dashboard', label: 'Resumen', icon: LayoutDashboard },
   { id: 'cartera', label: 'Cartera', icon: Briefcase },
   { id: 'movimientos', label: 'Movimientos', icon: ArrowLeftRight },
-  { id: 'importar', label: 'Importar', icon: Download },
   { id: 'fondos', label: 'Fondos', icon: Database },
   { id: 'analisis', label: 'Analisis', icon: BarChart3 },
   { id: 'ajustes', label: 'Ajustes', icon: Settings },
