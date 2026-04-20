@@ -1,10 +1,10 @@
 'use client'
 
-import { ArrowUpRight, ArrowDownRight, ExternalLink } from 'lucide-react'
+import { ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { CurrentHolding } from '@/lib/supabase/types'
 import type { PortfolioDashboardData } from '@/lib/data/portfolio'
-import { formatCurrency, formatPercent, fundInitials } from '@/lib/data/format'
+import { formatCurrency, formatPercent } from '@/lib/data/format'
 
 interface PosicionesCardProps {
   holdings: CurrentHolding[]
@@ -16,9 +16,6 @@ export function PosicionesCard({ holdings, diagnostics }: PosicionesCardProps) {
     <div className="bg-surface-1 border border-border/70 rounded-2xl p-5 flex flex-col gap-4 shadow-[0_14px_36px_oklch(0_0_0/0.22)] transition-[background-color,border-color,box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:border-border hover:shadow-[0_18px_44px_oklch(0_0_0/0.3)]">
       <div className="flex items-center justify-between">
         <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Posiciones</p>
-        <button className="text-xs text-primary hover:text-primary/85 transition-colors duration-150 ease-out font-medium flex items-center gap-1">
-          Fondos indexados <ExternalLink className="w-3 h-3" />
-        </button>
       </div>
 
       <div className="overflow-x-auto -mx-1">
@@ -40,19 +37,14 @@ export function PosicionesCard({ holdings, diagnostics }: PosicionesCardProps) {
               return (
                 <tr key={pos.id} className={cn('group transition-colors duration-150 ease-out hover:bg-surface-2/70', index < holdings.length - 1 && 'border-b border-border/20')}>
                   <td className="py-2.5 pl-1">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0 bg-primary/80">
-                        {fundInitials(pos.fund_name)}
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-semibold text-foreground">{pos.isin}</span>
+                        <span className="px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-blue-muted text-blue-accent">
+                          Fondo indexado
+                        </span>
                       </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-semibold text-foreground">{pos.isin}</span>
-                          <span className="px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-blue-muted text-blue-accent">
-                            Fondo indexado
-                          </span>
-                        </div>
-                        <span className="text-muted-foreground truncate block max-w-[220px]">{pos.fund_name}</span>
-                      </div>
+                      <span className="text-muted-foreground truncate block max-w-[300px]">{pos.fund_name}</span>
                     </div>
                   </td>
                   <td className="py-2.5 text-right text-muted-foreground">{Number(pos.shares).toFixed(4)}</td>

@@ -1,7 +1,7 @@
 'use client'
 
 import { FormEvent, useMemo, useState } from 'react'
-import { Search, Plus, ArrowUpCircle, ArrowDownCircle, ArrowDownToLine, ArrowUpFromLine, RefreshCw } from 'lucide-react'
+import { Search, Plus, ArrowUpCircle, ArrowDownCircle, ArrowDownToLine, ArrowUpFromLine, RefreshCw, Trash2, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Account, Fund, RecentTransaction, TransactionType } from '@/lib/supabase/types'
 import type { PortfolioDashboardData } from '@/lib/data/portfolio'
@@ -30,6 +30,8 @@ export function TransaccionesCard({ transactions, funds, accounts, diagnostics }
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<RecentTransaction | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const filtered = useMemo(() => transactions.filter((transaction) => {
     const label = transactionTypeLabel[transaction.transaction_type]
@@ -57,6 +59,30 @@ export function TransaccionesCard({ transactions, funds, accounts, diagnostics }
     }
     setStatus('Movimiento guardado. Recargando datos...')
     window.location.reload()
+  }
+
+  async function handleDelete() {
+    if (!pendingDelete) return
+    setDeleting(true)
+    setStatus('Eliminando movimiento...')
+
+    try {
+      const response = await fetch(`/api/transactions/${pendingDelete.id}`, { method: 'DELETE' })
+      const result = await response.json()
+
+      if (!response.ok || !result.ok) {
+        setStatus(result.error ?? 'No se pudo eliminar el movimiento.')
+        return
+      }
+
+      setPendingDelete(null)
+      setStatus('Movimiento eliminado. Recargando datos...')
+      window.location.reload()
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'No se pudo eliminar el movimiento.')
+    } finally {
+      setDeleting(false)
+    }
   }
 
   return (
@@ -114,7 +140,7 @@ export function TransaccionesCard({ transactions, funds, accounts, diagnostics }
       </div>
 
       <div className="overflow-x-auto -mx-1">
-        <table className="w-full text-xs min-w-[680px]">
+        <table className="w-full text-xs min-w-[760px]">
           <thead>
             <tr className="border-b border-border/40">
               <th className="text-left pb-2.5 pl-1 text-muted-foreground font-medium">Fecha</th>
@@ -122,7 +148,8 @@ export function TransaccionesCard({ transactions, funds, accounts, diagnostics }
               <th className="text-left pb-2.5 text-muted-foreground font-medium">Tipo</th>
               <th className="text-right pb-2.5 text-muted-foreground font-medium">Particip.</th>
               <th className="text-right pb-2.5 text-muted-foreground font-medium">NAV</th>
-              <th className="text-right pb-2.5 pr-1 text-muted-foreground font-medium">Importe</th>
+              <th className="text-right pb-2.5 text-muted-foreground font-medium">Importe</th>
+              <th className="text-right pb-2.5 pr-1 text-muted-foreground font-medium">Accion</th>
             </tr>
           </thead>
           <tbody>
@@ -146,12 +173,22 @@ export function TransaccionesCard({ transactions, funds, accounts, diagnostics }
                   </td>
                   <td className="py-2.5 text-right text-muted-foreground">{Number(transaction.shares).toFixed(4)}</td>
                   <td className="py-2.5 text-right text-muted-foreground">{transaction.nav_used ? formatCurrency(Number(transaction.nav_used), 4) : 'N/D'}</td>
-                  <td className="py-2.5 text-right pr-1 font-semibold text-foreground">{formatCurrency(Number(transaction.amount_eur), 2)}</td>
+                  <td className="py-2.5 text-right font-semibold text-foreground">{formatCurrency(Number(transaction.amount_eur), 2)}</td>
+                  <td className="py-2.5 pr-1 text-right">
+                    <button
+                      type="button"
+                      onClick={() => setPendingDelete(transaction)}
+                      className="inline-flex items-center justify-center rounded-lg border border-border/50 bg-surface-2 p-1.5 text-muted-foreground transition-[background-color,color,border-color,transform] duration-150 ease-out hover:-translate-y-px hover:border-loss/40 hover:bg-loss-muted hover:text-loss focus:outline-none focus:ring-2 focus:ring-loss/30"
+                      aria-label={`Eliminar movimiento de ${transaction.isin}`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </td>
                 </tr>
               )
             }) : (
               <tr>
-                <td colSpan={6} className="py-10 text-center text-muted-foreground">
+                <td colSpan={7} className="py-10 text-center text-muted-foreground">
                   {diagnostics?.validImportRows
                     ? 'Hay filas validas en staging pendientes de aceptar.'
                     : diagnostics?.invalidImportRows
@@ -163,6 +200,62 @@ export function TransaccionesCard({ transactions, funds, accounts, diagnostics }
           </tbody>
         </table>
       </div>
+
+      {pendingDelete ? (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-border/70 bg-surface-1 p-5 shadow-[0_24px_80px_oklch(0_0_0/0.45)]">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 rounded-xl bg-loss-muted p-2 text-loss">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-base font-semibold text-foreground">Eliminar movimiento</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Se borrara definitivamente este movimiento y se recalculara la cartera completa.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-border/50 bg-surface-2/70 p-3 text-xs">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">Fecha</span>
+                <span className="font-medium text-foreground">{new Date(pendingDelete.trade_date).toLocaleDateString('es-ES')}</span>
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">Fondo</span>
+                <span className="truncate text-right font-medium text-foreground">{pendingDelete.isin} · {pendingDelete.fund_name}</span>
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">Tipo</span>
+                <span className="font-medium text-foreground">{transactionTypeLabel[pendingDelete.transaction_type]}</span>
+              </div>
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <span className="text-muted-foreground">Importe</span>
+                <span className="font-semibold text-foreground">{formatCurrency(Number(pendingDelete.amount_eur), 2)}</span>
+              </div>
+            </div>
+
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setPendingDelete(null)}
+                disabled={deleting}
+                className="rounded-xl border border-border/60 px-4 py-2 text-sm font-semibold text-muted-foreground transition-colors duration-150 ease-out hover:bg-surface-2 hover:text-foreground disabled:opacity-60"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={deleting}
+                className="rounded-xl bg-loss px-4 py-2 text-sm font-semibold text-white transition-[background-color,transform] duration-150 ease-out hover:-translate-y-px hover:bg-loss/90 disabled:translate-y-0 disabled:opacity-60"
+              >
+                {deleting ? 'Eliminando...' : 'Eliminar definitivamente'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

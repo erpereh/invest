@@ -20,7 +20,10 @@ export interface PortfolioEvolutionPoint {
 }
 
 export interface DistributionSlice {
+  key: string
   name: string
+  detail?: string
+  rawValue?: string
   value: number
   marketValue: number
 }
@@ -45,6 +48,7 @@ export interface PortfolioDashboardData {
     validImportRows: number
   }
   groupedDistribution: {
+    totalMarketValue: number
     funds: DistributionSlice[]
     regions: DistributionSlice[]
     categories: DistributionSlice[]
@@ -82,6 +86,7 @@ export function getEmptyDashboardData(error?: string): PortfolioDashboardData {
       validImportRows: 0,
     },
     groupedDistribution: {
+      totalMarketValue: 0,
       funds: [],
       regions: [],
       categories: [],
@@ -145,6 +150,7 @@ export async function getPortfolioDashboardData(): Promise<PortfolioDashboardDat
   const holdings = holdingsResult.data ?? []
   const distribution = distributionResult.data ?? []
   const importRows = importRowsResult.data ?? []
+  const groupedDistribution = buildGroupedDistribution(holdings)
 
   return {
     configured: true,
@@ -164,16 +170,7 @@ export async function getPortfolioDashboardData(): Promise<PortfolioDashboardDat
       invalidImportRows: importRows.filter((row) => row.validation_status === 'invalid' || row.validation_status === 'rejected').length,
       validImportRows: importRows.filter((row) => row.validation_status === 'valid').length,
     },
-    groupedDistribution: {
-      funds: distribution.map((item) => ({
-        name: item.isin,
-        value: Number(item.portfolio_weight_pct ?? 0),
-        marketValue: Number(item.market_value ?? 0),
-      })),
-      regions: groupHoldings(holdings, (item) => item.region || 'Sin region'),
-      categories: groupHoldings(holdings, (item) => item.category || 'Sin categoria'),
-      managers: groupHoldings(holdings, (item) => item.management_company || 'Sin gestora'),
-    },
+    groupedDistribution,
   }
 }
 
@@ -197,20 +194,125 @@ function buildEvolution(rows: { holding_date: string; market_value: number; inve
   }))
 }
 
-function groupHoldings(holdings: CurrentHolding[], getKey: (item: CurrentHolding) => string): DistributionSlice[] {
-  const total = holdings.reduce((acc, item) => acc + Number(item.market_value ?? 0), 0)
-  const grouped = new Map<string, number>()
+function buildGroupedDistribution(holdings: CurrentHolding[]): PortfolioDashboardData['groupedDistribution'] {
+  const valuedHoldings = holdings.filter((item) => {
+    const shares = Number(item.shares ?? 0)
+    const marketValue = Number(item.market_value ?? 0)
+    return Number.isFinite(shares) && Number.isFinite(marketValue) && shares > 0 && marketValue > 0
+  })
+
+  const totalMarketValue = valuedHoldings.reduce((acc, item) => acc + Number(item.market_value ?? 0), 0)
+
+  return {
+    totalMarketValue,
+    funds: groupDistributionByFund(valuedHoldings, totalMarketValue),
+    regions: groupDistributionByRegion(valuedHoldings, totalMarketValue),
+    categories: groupDistributionByCategory(valuedHoldings, totalMarketValue),
+    managers: groupDistributionByManager(valuedHoldings, totalMarketValue),
+  }
+}
+
+function groupDistributionByFund(holdings: CurrentHolding[], total: number): DistributionSlice[] {
+  return groupHoldings(holdings, total, (item) => ({
+    key: item.fund_id,
+    name: item.fund_name,
+    detail: item.isin,
+    rawValue: item.fund_id,
+  }))
+}
+
+function groupDistributionByRegion(holdings: CurrentHolding[], total: number): DistributionSlice[] {
+  return groupHoldings(holdings, total, (item) => {
+    const rawValue = normalizeGroupValue(item.region, 'Sin region')
+    return {
+      key: `region:${rawValue}`,
+      name: formatRegionLabel(rawValue),
+      rawValue,
+    }
+  })
+}
+
+function groupDistributionByCategory(holdings: CurrentHolding[], total: number): DistributionSlice[] {
+  return groupHoldings(holdings, total, (item) => {
+    const rawValue = normalizeGroupValue(item.category, 'Sin categoria')
+    return {
+      key: `category:${rawValue}`,
+      name: formatCategoryLabel(rawValue),
+      rawValue,
+    }
+  })
+}
+
+function groupDistributionByManager(holdings: CurrentHolding[], total: number): DistributionSlice[] {
+  return groupHoldings(holdings, total, (item) => {
+    const rawValue = normalizeGroupValue(item.management_company, 'Sin gestora')
+    return {
+      key: `manager:${rawValue}`,
+      name: rawValue,
+      rawValue,
+    }
+  })
+}
+
+function groupHoldings(
+  holdings: CurrentHolding[],
+  total: number,
+  getGroup: (item: CurrentHolding) => { key: string; name: string; detail?: string; rawValue?: string },
+): DistributionSlice[] {
+  const grouped = new Map<string, { name: string; detail?: string; rawValue?: string; marketValue: number }>()
 
   for (const item of holdings) {
-    const key = getKey(item)
-    grouped.set(key, (grouped.get(key) ?? 0) + Number(item.market_value ?? 0))
+    const group = getGroup(item)
+    const current = grouped.get(group.key) ?? { name: group.name, detail: group.detail, rawValue: group.rawValue, marketValue: 0 }
+    current.marketValue += Number(item.market_value ?? 0)
+    current.detail = current.detail ?? group.detail
+    current.rawValue = current.rawValue ?? group.rawValue
+    grouped.set(group.key, current)
   }
 
   return Array.from(grouped.entries())
-    .map(([name, marketValue]) => ({
-      name,
-      marketValue,
-      value: total > 0 ? (marketValue / total) * 100 : 0,
+    .map(([key, item]) => ({
+      key,
+      name: item.name,
+      detail: item.detail,
+      rawValue: item.rawValue,
+      marketValue: item.marketValue,
+      value: total > 0 ? (item.marketValue / total) * 100 : 0,
     }))
     .sort((a, b) => b.marketValue - a.marketValue)
+}
+
+function normalizeGroupValue(value: string | null | undefined, fallback: string) {
+  const normalized = value?.trim()
+  return normalized || fallback
+}
+
+function formatRegionLabel(region: string) {
+  const labels: Record<string, string> = {
+    developed_world: 'Mercados desarrollados',
+    emerging_markets: 'Mercados emergentes',
+    global: 'Global',
+    'Sin region': 'Sin region',
+  }
+
+  return labels[region] ?? formatRawLabel(region)
+}
+
+function formatCategoryLabel(category: string) {
+  const labels: Record<string, string> = {
+    global_developed_index: 'Indice global desarrollado',
+    emerging_markets_index: 'Indice mercados emergentes',
+    global_small_cap_index: 'Indice global small cap',
+    'Sin categoria': 'Sin categoria',
+  }
+
+  return labels[category] ?? formatRawLabel(category)
+}
+
+function formatRawLabel(value: string) {
+  return value
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase())
 }

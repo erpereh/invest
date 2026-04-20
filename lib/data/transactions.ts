@@ -42,6 +42,44 @@ export async function createTransaction(input: CreateTransactionInput) {
   return data
 }
 
+export async function deleteTransaction(transactionId: string) {
+  const id = z.string().uuid().parse(transactionId)
+  const supabase = createServiceSupabaseClient()
+
+  console.info('[transactions] delete requested', { transactionId: id })
+
+  const { data: existing, error: lookupError } = await supabase
+    .from('transactions')
+    .select('*')
+    .eq('id', id)
+    .single()
+
+  if (lookupError || !existing) {
+    console.warn('[transactions] delete failed: transaction not found', {
+      transactionId: id,
+      error: lookupError?.message,
+    })
+    throw new Error('No se encontro el movimiento para eliminar.')
+  }
+
+  const { error: deleteError } = await supabase.from('transactions').delete().eq('id', id)
+  if (deleteError) {
+    console.error('[transactions] delete failed', { transactionId: id, error: deleteError.message })
+    throw new Error(deleteError.message)
+  }
+
+  const recalculation = await recalculateHoldings()
+  console.info('[transactions] delete completed', {
+    transactionId: id,
+    fundId: existing.fund_id,
+    accountId: existing.account_id,
+    tradeDate: existing.trade_date,
+    recalculation,
+  })
+
+  return { deletedTransactionId: id, transaction: existing, recalculation }
+}
+
 export async function listTransactions() {
   const supabase = createServiceSupabaseClient()
   const { data, error } = await supabase.from('recent_transactions').select('*').limit(100)
