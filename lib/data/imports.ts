@@ -1,5 +1,5 @@
 import { createServiceSupabaseClient } from '@/lib/supabase/server'
-import type { ImportRow, TransactionType } from '@/lib/supabase/types'
+import type { ImportRow, Json, TransactionType } from '@/lib/supabase/types'
 import { resolveFundByIsin } from '@/lib/data/funds'
 import { normalizeIsin } from '@/lib/data/format'
 import { recalculateHoldings } from '@/lib/services/holdings'
@@ -24,6 +24,16 @@ interface ImportTransactionResult {
   status: 'created' | 'duplicate' | 'invalid'
   transactionId?: string
   error?: string
+}
+
+export interface UpdateImportRowInput {
+  isin?: string | null
+  fund_name?: string | null
+  transaction_type?: TransactionType | null
+  trade_date?: string | null
+  amount_eur?: number | null
+  shares?: number | null
+  nav?: number | null
 }
 
 export async function createImportWithRows(input: {
@@ -107,6 +117,64 @@ export async function getImportDetails(importId: string) {
   if (rowsError) throw new Error(rowsError.message)
 
   return { importJob, rows: rows ?? [] }
+}
+
+export async function getImportRowsByImportId(importId: string) {
+  return getImportRows(importId)
+}
+
+export async function updateImportRow(importId: string, rowId: string, input: UpdateImportRowInput) {
+  const supabase = createServiceSupabaseClient()
+  const { data: current, error: currentError } = await supabase
+    .from('import_rows')
+    .select('*')
+    .eq('import_id', importId)
+    .eq('id', rowId)
+    .single()
+
+  if (currentError) throw new Error(currentError.message)
+
+  const normalized: NormalizedImportRow = {
+    isin: input.isin ?? current.detected_isin,
+    fund_name: input.fund_name ?? current.detected_fund_name,
+    transaction_type: input.transaction_type ?? current.detected_transaction_type,
+    trade_date: input.trade_date ?? current.detected_trade_date,
+    amount_eur: input.amount_eur ?? current.detected_amount,
+    shares: input.shares ?? current.detected_shares,
+    nav: input.nav ?? current.detected_nav,
+    confidence: current.confidence,
+  }
+
+  const resolved = await resolveImportRowFund(normalized)
+  const validation = validateDetectedRow(resolved)
+  const nextJson = mergeJsonObject(current.normalized_json, {
+    edited_at: new Date().toISOString(),
+    edited_payload: JSON.parse(JSON.stringify(input)) as Json,
+  })
+
+  const { data, error } = await supabase
+    .from('import_rows')
+    .update({
+      detected_fund_name: resolved.fund_name ?? null,
+      detected_isin: resolved.isin ? normalizeIsin(resolved.isin) : null,
+      detected_transaction_type: resolved.transaction_type ?? null,
+      detected_trade_date: resolved.trade_date ?? null,
+      detected_amount: resolved.amount_eur ?? null,
+      detected_shares: resolved.shares ?? null,
+      detected_nav: resolved.nav ?? null,
+      validation_status: validation.ok ? 'valid' : 'invalid',
+      validation_error: validation.error,
+      normalized_json: nextJson,
+    })
+    .eq('import_id', importId)
+    .eq('id', rowId)
+    .select('*')
+    .single()
+
+  if (error) throw new Error(error.message)
+  await updateImportStatus(importId)
+  console.info('[imports] import row updated', { importId, rowId, status: data.validation_status })
+  return data
 }
 
 export async function acceptImportRows(importId: string, rowIds?: string[]) {
@@ -336,4 +404,9 @@ async function updateImportStatus(importId: string) {
       error_message: status === 'failed' ? 'No hay filas validas para importar.' : null,
     })
     .eq('id', importId)
+}
+
+function mergeJsonObject(value: Json | null, extra: Record<string, Json | undefined>) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return extra
+  return { ...value, ...extra }
 }

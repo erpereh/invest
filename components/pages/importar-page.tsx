@@ -5,19 +5,23 @@ import {
   AlertTriangle,
   CheckCircle2,
   CircleDashed,
+  Edit3,
+  Eye,
   FileSpreadsheet,
   Image,
   Keyboard,
   Loader2,
   Search,
   Upload,
+  X,
   XCircle,
 } from 'lucide-react'
 import type { PortfolioDashboardData } from '@/lib/data/portfolio'
-import type { ImportJob, ImportRow } from '@/lib/supabase/types'
+import type { ImportJob, ImportRow, TransactionType } from '@/lib/supabase/types'
 import { cn } from '@/lib/utils'
 
 type ResolveStatus = 'idle' | 'loading' | 'found' | 'not_found' | 'error'
+type ReviewFilter = 'all' | 'valid' | 'invalid' | 'rejected' | 'selected'
 
 interface ResolvedFund {
   isin: string
@@ -33,6 +37,16 @@ interface UploadSummary {
   invalid: number
 }
 
+interface EditDraft {
+  detected_trade_date: string
+  detected_isin: string
+  detected_fund_name: string
+  detected_transaction_type: TransactionType | ''
+  detected_amount: string
+  detected_shares: string
+  detected_nav: string
+}
+
 export function ImportarPage({ data }: { data: PortfolioDashboardData }) {
   const [status, setStatus] = useState<string | null>(null)
   const [manualIsin, setManualIsin] = useState('')
@@ -41,6 +55,14 @@ export function ImportarPage({ data }: { data: PortfolioDashboardData }) {
   const [resolveStatus, setResolveStatus] = useState<ResolveStatus>('idle')
   const [selectedFile, setSelectedFile] = useState<string | null>(null)
   const [uploadSummary, setUploadSummary] = useState<UploadSummary | null>(null)
+  const [activeImport, setActiveImport] = useState<ImportJob | null>(null)
+  const [modalRows, setModalRows] = useState<ImportRow[]>([])
+  const [modalOpen, setModalOpen] = useState(false)
+  const [modalLoading, setModalLoading] = useState(false)
+  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set())
+  const [filter, setFilter] = useState<ReviewFilter>('all')
+  const [editingRowId, setEditingRowId] = useState<string | null>(null)
+  const [editDraft, setEditDraft] = useState<EditDraft | null>(null)
 
   const latestImport = data.imports[0] ?? null
   const latestRows = latestImport ? data.importRows.filter((row) => row.import_id === latestImport.id) : []
@@ -118,18 +140,7 @@ export function ImportarPage({ data }: { data: PortfolioDashboardData }) {
       return
     }
 
-    const rows = (result.rows ?? []) as ImportRow[]
-    const valid = rows.filter((row) => row.validation_status === 'valid').length
-    const invalid = rows.length - valid
-    setUploadSummary({
-      fileName: result.importJob?.original_filename ?? selectedFile ?? 'Archivo',
-      detectedType: result.detectedFormat ?? result.importJob?.raw_json?.detected_format ?? 'CSV',
-      rows: rows.length,
-      valid,
-      invalid,
-    })
-    setStatus('Importacion preparada. Revisa las filas detectadas antes de aceptar.')
-    window.location.reload()
+    openReviewFromResult(result, result.detectedFormat ?? 'CSV')
   }
 
   async function postJson(endpoint: string, body: unknown) {
@@ -144,11 +155,62 @@ export function ImportarPage({ data }: { data: PortfolioDashboardData }) {
       setStatus(result.error ?? 'No se pudo procesar.')
       return
     }
-    setStatus('Staging creado. Recargando...')
-    window.location.reload()
+    openReviewFromResult(result, 'Manual')
+  }
+
+  function openReviewFromResult(result: { importJob?: ImportJob; rows?: ImportRow[] }, detectedType: string) {
+    const importJob = result.importJob
+    const rows = dedupeRows((result.rows ?? []) as ImportRow[])
+    if (!importJob) {
+      setStatus('Staging creado, pero no se pudo abrir la revision.')
+      return
+    }
+
+    setUploadSummary({
+      fileName: importJob.original_filename ?? selectedFile ?? importJob.source_name,
+      detectedType: getImportTypeLabel(importJob) || detectedType,
+      rows: rows.length,
+      valid: rows.filter((row) => row.validation_status === 'valid').length,
+      invalid: rows.filter((row) => row.validation_status === 'invalid' || row.validation_status === 'rejected').length,
+    })
+    setStatus('Importacion preparada. Revisa las filas detectadas antes de aceptar.')
+    openReview(importJob, rows)
+  }
+
+  async function openReview(importJob: ImportJob, prefetchedRows?: ImportRow[]) {
+    setActiveImport(importJob)
+    setModalOpen(true)
+    setFilter('all')
+    setSelectedRows(new Set())
+    setEditingRowId(null)
+    setEditDraft(null)
+
+    if (prefetchedRows) {
+      setModalRows(dedupeRows(prefetchedRows))
+      return
+    }
+
+    await refreshModalRows(importJob.id)
+  }
+
+  async function refreshModalRows(importId = activeImport?.id) {
+    if (!importId) return
+    setModalLoading(true)
+    const response = await fetch(`/api/imports/${importId}/rows`)
+    const result = await response.json()
+    setModalLoading(false)
+    if (!response.ok || !result.ok) {
+      setStatus(result.error ?? 'No se pudieron cargar las filas.')
+      return
+    }
+    setModalRows(dedupeRows(result.rows ?? []))
   }
 
   async function acceptImport(id: string, rowIds?: string[]) {
+    if (rowIds && rowIds.length === 0) {
+      setStatus('No hay filas validas para aprobar.')
+      return
+    }
     setStatus('Aceptando filas validas...')
     const response = await fetch(`/api/imports/${id}/accept`, {
       method: 'POST',
@@ -161,10 +223,17 @@ export function ImportarPage({ data }: { data: PortfolioDashboardData }) {
         ? `Aceptadas: ${result.accepted}. Creadas: ${result.created}. Duplicadas: ${result.duplicates}. Invalidas: ${result.invalid}.`
         : result.error
     )
-    if (result.ok) window.location.reload()
+    if (result.ok) {
+      setSelectedRows(new Set())
+      await refreshModalRows(id)
+    }
   }
 
   async function rejectImport(id: string, rowIds?: string[]) {
+    if (rowIds && rowIds.length === 0) {
+      setStatus('No hay filas seleccionadas para rechazar.')
+      return
+    }
     setStatus('Rechazando filas...')
     const response = await fetch(`/api/imports/${id}/reject`, {
       method: 'POST',
@@ -173,7 +242,37 @@ export function ImportarPage({ data }: { data: PortfolioDashboardData }) {
     })
     const result = await response.json()
     setStatus(result.ok ? `Filas rechazadas: ${result.rejected}` : result.error)
-    if (result.ok) window.location.reload()
+    if (result.ok) {
+      setSelectedRows(new Set())
+      await refreshModalRows(id)
+    }
+  }
+
+  async function saveEditedRow(row: ImportRow) {
+    if (!activeImport || !editDraft) return
+    setStatus('Guardando fila...')
+    const response = await fetch(`/api/imports/${activeImport.id}/rows/${row.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        isin: editDraft.detected_isin,
+        fund_name: editDraft.detected_fund_name,
+        transaction_type: editDraft.detected_transaction_type || null,
+        trade_date: editDraft.detected_trade_date,
+        amount_eur: editDraft.detected_amount,
+        shares: editDraft.detected_shares,
+        nav: editDraft.detected_nav,
+      }),
+    })
+    const result = await response.json()
+    if (!response.ok || !result.ok) {
+      setStatus(result.error ?? 'No se pudo guardar la fila.')
+      return
+    }
+    setStatus('Fila actualizada.')
+    setEditingRowId(null)
+    setEditDraft(null)
+    await refreshModalRows(activeImport.id)
   }
 
   return (
@@ -213,7 +312,7 @@ export function ImportarPage({ data }: { data: PortfolioDashboardData }) {
             </button>
           </form>
 
-          <ImportSummary summary={uploadSummary ?? latestSummary} />
+          <ImportSummary summary={uploadSummary ?? (latestImport ? buildImportSummary(latestImport, latestImport ? data.importRows.filter((row) => row.import_id === latestImport.id) : []) : null)} />
         </section>
 
         <section className="bg-surface-1 border border-border/70 rounded-2xl p-5 flex flex-col gap-5 shadow-[0_14px_36px_oklch(0_0_0/0.22)]">
@@ -254,12 +353,7 @@ export function ImportarPage({ data }: { data: PortfolioDashboardData }) {
             <label className="flex flex-col gap-2">
               <span className="text-xs font-medium text-muted-foreground">Tipo</span>
               <select name="transaction_type" required defaultValue="buy" className="input-like">
-                <option value="buy">Compra</option>
-                <option value="sell">Venta</option>
-                <option value="transfer_in">Traspaso entrada</option>
-                <option value="transfer_out">Traspaso salida</option>
-                <option value="switch_in">Switch entrada</option>
-                <option value="switch_out">Switch salida</option>
+                <TransactionTypeOptions />
               </select>
             </label>
 
@@ -277,8 +371,29 @@ export function ImportarPage({ data }: { data: PortfolioDashboardData }) {
         <ImagePanel onSubmit={(event) => submitFile(event, '/api/imports/image')} />
       </div>
 
-      <ImportsTable data={data} onAccept={acceptImport} onReject={rejectImport} />
-      <StagingTable rows={data.importRows} onAccept={acceptImport} onReject={rejectImport} />
+      <ImportsTable data={data} onReview={openReview} />
+
+      {modalOpen && activeImport ? (
+        <ReviewModal
+          importJob={activeImport}
+          rows={modalRows}
+          loading={modalLoading}
+          selectedRows={selectedRows}
+          setSelectedRows={setSelectedRows}
+          filter={filter}
+          setFilter={setFilter}
+          editingRowId={editingRowId}
+          setEditingRowId={setEditingRowId}
+          editDraft={editDraft}
+          setEditDraft={setEditDraft}
+          onClose={() => setModalOpen(false)}
+          onApproveAllValid={() => acceptImport(activeImport.id, modalRows.filter((row) => row.validation_status === 'valid').map((row) => row.id))}
+          onApproveSelected={() => acceptImport(activeImport.id, Array.from(selectedRows))}
+          onRejectSelected={() => rejectImport(activeImport.id, Array.from(selectedRows))}
+          onRejectRow={(rowId) => rejectImport(activeImport.id, [rowId])}
+          onSaveRow={saveEditedRow}
+        />
+      ) : null}
     </div>
   )
 }
@@ -306,6 +421,334 @@ function ImportSummary({ summary }: { summary: UploadSummary | null }) {
       <SummaryTile label="Validas" value={String(summary.valid)} tone="gain" />
       <SummaryTile label="Invalidas" value={String(summary.invalid)} tone={summary.invalid > 0 ? 'loss' : undefined} />
     </div>
+  )
+}
+
+function ReviewModal({
+  importJob,
+  rows,
+  loading,
+  selectedRows,
+  setSelectedRows,
+  filter,
+  setFilter,
+  editingRowId,
+  setEditingRowId,
+  editDraft,
+  setEditDraft,
+  onClose,
+  onApproveAllValid,
+  onApproveSelected,
+  onRejectSelected,
+  onRejectRow,
+  onSaveRow,
+}: {
+  importJob: ImportJob
+  rows: ImportRow[]
+  loading: boolean
+  selectedRows: Set<string>
+  setSelectedRows: (rows: Set<string>) => void
+  filter: ReviewFilter
+  setFilter: (filter: ReviewFilter) => void
+  editingRowId: string | null
+  setEditingRowId: (id: string | null) => void
+  editDraft: EditDraft | null
+  setEditDraft: (draft: EditDraft | null) => void
+  onClose: () => void
+  onApproveAllValid: () => void
+  onApproveSelected: () => void
+  onRejectSelected: () => void
+  onRejectRow: (rowId: string) => void
+  onSaveRow: (row: ImportRow) => void
+}) {
+  const dedupedRows = useMemo(() => dedupeRows(rows), [rows])
+  const filteredRows = useMemo(
+    () =>
+      dedupedRows.filter((row) => {
+        if (filter === 'selected') return selectedRows.has(row.id)
+        if (filter === 'valid') return row.validation_status === 'valid'
+        if (filter === 'invalid') return row.validation_status === 'invalid'
+        if (filter === 'rejected') return row.validation_status === 'rejected'
+        return true
+      }),
+    [dedupedRows, filter, selectedRows]
+  )
+  const summary = buildImportSummary(importJob, dedupedRows)
+  const selectedCount = selectedRows.size
+  const allFilteredSelected = filteredRows.length > 0 && filteredRows.every((row) => selectedRows.has(row.id))
+
+  function toggleRow(id: string) {
+    const next = new Set(selectedRows)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    setSelectedRows(next)
+  }
+
+  function toggleAllFiltered() {
+    const next = new Set(selectedRows)
+    if (allFilteredSelected) {
+      for (const row of filteredRows) next.delete(row.id)
+    } else {
+      for (const row of filteredRows) next.add(row.id)
+    }
+    setSelectedRows(next)
+  }
+
+  function startEdit(row: ImportRow) {
+    setEditingRowId(row.id)
+    setEditDraft({
+      detected_trade_date: row.detected_trade_date ?? '',
+      detected_isin: row.detected_isin ?? '',
+      detected_fund_name: row.detected_fund_name ?? '',
+      detected_transaction_type: row.detected_transaction_type ?? '',
+      detected_amount: row.detected_amount == null ? '' : String(row.detected_amount),
+      detected_shares: row.detected_shares == null ? '' : String(row.detected_shares),
+      detected_nav: row.detected_nav == null ? '' : String(row.detected_nav),
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 z-[80] bg-black/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6">
+      <div className="w-full max-w-[1500px] max-h-[88vh] bg-surface-1 border border-border/70 rounded-2xl shadow-[0_24px_80px_oklch(0_0_0/0.55)] flex flex-col overflow-hidden">
+        <div className="p-5 border-b border-border/50 flex flex-col gap-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Revision del import</p>
+              <h2 className="text-lg font-bold text-foreground mt-1">{summary.fileName}</h2>
+              <p className="text-xs text-muted-foreground">{summary.detectedType}</p>
+            </div>
+            <button onClick={onClose} className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-surface-2" aria-label="Cerrar">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
+            <SummaryTile label="Filas" value={String(summary.rows)} />
+            <SummaryTile label="Validas" value={String(countRows(dedupedRows, 'valid'))} tone="gain" />
+            <SummaryTile label="Invalidas" value={String(countRows(dedupedRows, 'invalid'))} tone={countRows(dedupedRows, 'invalid') > 0 ? 'loss' : undefined} />
+            <SummaryTile label="Rechazadas" value={String(countRows(dedupedRows, 'rejected'))} />
+            <SummaryTile label="Aceptadas" value={String(countRows(dedupedRows, 'accepted'))} tone="gain" />
+            <SummaryTile label="Seleccionadas" value={String(selectedCount)} />
+          </div>
+
+          <div className="flex flex-col lg:flex-row gap-3 lg:items-center lg:justify-between">
+            <div className="flex flex-wrap gap-1">
+              {[
+                ['all', 'Todas'],
+                ['valid', 'Validas'],
+                ['invalid', 'Invalidas'],
+                ['rejected', 'Rechazadas'],
+                ['selected', 'Seleccionadas'],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  onClick={() => setFilter(value as ReviewFilter)}
+                  className={cn(
+                    'px-2.5 py-1 rounded-lg text-xs font-medium transition-colors',
+                    filter === value ? 'bg-primary/18 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-surface-2'
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={onApproveAllValid} className="rounded-lg bg-gain-muted text-gain px-3 py-1.5 text-xs font-semibold">
+                Aprobar todas las validas
+              </button>
+              <button disabled={selectedCount === 0} onClick={onApproveSelected} className="rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-semibold disabled:opacity-45">
+                Aprobar seleccionadas
+              </button>
+              <button disabled={selectedCount === 0} onClick={onRejectSelected} className="rounded-lg bg-loss-muted text-loss px-3 py-1.5 text-xs font-semibold disabled:opacity-45">
+                Rechazar seleccionadas
+              </button>
+              <button onClick={onClose} className="rounded-lg bg-surface-2 text-muted-foreground hover:text-foreground px-3 py-1.5 text-xs font-semibold">
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-auto p-5">
+          {loading ? (
+            <div className="h-64 flex items-center justify-center text-sm text-muted-foreground">
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Cargando filas...
+            </div>
+          ) : (
+            <table className="w-full text-xs min-w-[1320px]">
+              <thead className="sticky top-0 bg-surface-1 z-10">
+                <tr className="border-b border-border/40">
+                  <th className="text-left pb-2.5 pr-2">
+                    <input type="checkbox" checked={allFilteredSelected} onChange={toggleAllFiltered} aria-label="Seleccionar filas filtradas" />
+                  </th>
+                  <th className="text-left pb-2.5 text-muted-foreground font-medium">Fecha</th>
+                  <th className="text-left pb-2.5 text-muted-foreground font-medium">ISIN</th>
+                  <th className="text-left pb-2.5 text-muted-foreground font-medium">Fondo</th>
+                  <th className="text-left pb-2.5 text-muted-foreground font-medium">Tipo</th>
+                  <th className="text-right pb-2.5 text-muted-foreground font-medium">Importe</th>
+                  <th className="text-right pb-2.5 text-muted-foreground font-medium">Particip.</th>
+                  <th className="text-right pb-2.5 text-muted-foreground font-medium">NAV</th>
+                  <th className="text-right pb-2.5 text-muted-foreground font-medium">Conf.</th>
+                  <th className="text-left pb-2.5 text-muted-foreground font-medium">Estado</th>
+                  <th className="text-right pb-2.5 text-muted-foreground font-medium">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRows.length > 0 ? filteredRows.map((row) => (
+                  <ReviewRow
+                    key={row.id}
+                    row={row}
+                    selected={selectedRows.has(row.id)}
+                    onToggle={() => toggleRow(row.id)}
+                    editing={editingRowId === row.id}
+                    editDraft={editDraft}
+                    setEditDraft={setEditDraft}
+                    onStartEdit={() => startEdit(row)}
+                    onCancelEdit={() => {
+                      setEditingRowId(null)
+                      setEditDraft(null)
+                    }}
+                    onSave={() => onSaveRow(row)}
+                    onReject={() => onRejectRow(row.id)}
+                  />
+                )) : (
+                  <tr>
+                    <td colSpan={11} className="py-16 text-center text-muted-foreground">No hay filas para este filtro.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ReviewRow({
+  row,
+  selected,
+  onToggle,
+  editing,
+  editDraft,
+  setEditDraft,
+  onStartEdit,
+  onCancelEdit,
+  onSave,
+  onReject,
+}: {
+  row: ImportRow
+  selected: boolean
+  onToggle: () => void
+  editing: boolean
+  editDraft: EditDraft | null
+  setEditDraft: (draft: EditDraft | null) => void
+  onStartEdit: () => void
+  onCancelEdit: () => void
+  onSave: () => void
+  onReject: () => void
+}) {
+  if (editing && editDraft) {
+    return (
+      <tr className="border-b border-border/20 bg-surface-2/45">
+        <td className="py-2 pr-2"><input type="checkbox" checked={selected} onChange={onToggle} /></td>
+        <td className="py-2"><input type="date" className="input-like w-36" value={editDraft.detected_trade_date} onChange={(event) => setEditDraft({ ...editDraft, detected_trade_date: event.target.value })} /></td>
+        <td className="py-2"><input className="input-like w-36" value={editDraft.detected_isin} onChange={(event) => setEditDraft({ ...editDraft, detected_isin: event.target.value.toUpperCase() })} /></td>
+        <td className="py-2"><input className="input-like w-64" value={editDraft.detected_fund_name} onChange={(event) => setEditDraft({ ...editDraft, detected_fund_name: event.target.value })} /></td>
+        <td className="py-2">
+          <select className="input-like w-40" value={editDraft.detected_transaction_type} onChange={(event) => setEditDraft({ ...editDraft, detected_transaction_type: event.target.value as TransactionType })}>
+            <option value="">N/D</option>
+            <TransactionTypeOptions />
+          </select>
+        </td>
+        <td className="py-2 text-right"><input className="input-like w-28 text-right" value={editDraft.detected_amount} onChange={(event) => setEditDraft({ ...editDraft, detected_amount: event.target.value })} /></td>
+        <td className="py-2 text-right"><input className="input-like w-28 text-right" value={editDraft.detected_shares} onChange={(event) => setEditDraft({ ...editDraft, detected_shares: event.target.value })} /></td>
+        <td className="py-2 text-right"><input className="input-like w-24 text-right" value={editDraft.detected_nav} onChange={(event) => setEditDraft({ ...editDraft, detected_nav: event.target.value })} /></td>
+        <td className="py-2 text-right text-muted-foreground">{row.confidence != null ? `${Math.round(Number(row.confidence) * 100)}%` : 'N/D'}</td>
+        <td className="py-2"><StatusPill status={row.validation_status} /></td>
+        <td className="py-2 text-right">
+          <div className="flex justify-end gap-2">
+            <button onClick={onSave} className="rounded-lg bg-primary text-primary-foreground px-2 py-1 text-[11px] font-semibold">Guardar</button>
+            <button onClick={onCancelEdit} className="rounded-lg bg-surface-3 text-muted-foreground px-2 py-1 text-[11px] font-semibold">Cancelar</button>
+          </div>
+        </td>
+      </tr>
+    )
+  }
+
+  return (
+    <tr className="border-b border-border/20 hover:bg-surface-2/45">
+      <td className="py-3 pr-2"><input type="checkbox" checked={selected} onChange={onToggle} /></td>
+      <td className="py-3 text-muted-foreground">{row.detected_trade_date ?? 'N/D'}</td>
+      <td className="py-3 font-semibold text-foreground">{row.detected_isin ?? 'N/D'}</td>
+      <td className="py-3 text-muted-foreground max-w-[300px] truncate">{row.detected_fund_name ?? 'N/D'}</td>
+      <td className="py-3 text-muted-foreground">{row.detected_transaction_type ?? 'N/D'}</td>
+      <td className="py-3 text-right text-muted-foreground">{formatNumber(row.detected_amount)}</td>
+      <td className="py-3 text-right text-muted-foreground">{formatNumber(row.detected_shares, 4)}</td>
+      <td className="py-3 text-right text-muted-foreground">{formatNumber(row.detected_nav, 4)}</td>
+      <td className="py-3 text-right text-muted-foreground">{row.confidence != null ? `${Math.round(Number(row.confidence) * 100)}%` : 'N/D'}</td>
+      <td className="py-3">
+        <div className="flex flex-col gap-1">
+          <StatusPill status={row.validation_status} />
+          {row.validation_error ? <span className="text-[10px] text-loss max-w-[280px]">{row.validation_error}</span> : null}
+        </div>
+      </td>
+      <td className="py-3 text-right">
+        <div className="flex justify-end gap-2">
+          <button onClick={onStartEdit} className="p-1.5 rounded-lg bg-surface-2 text-muted-foreground hover:text-foreground" aria-label="Editar fila">
+            <Edit3 className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={onReject} className="p-1.5 rounded-lg bg-loss-muted text-loss" aria-label="Rechazar fila">
+            <XCircle className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </td>
+    </tr>
+  )
+}
+
+function ImportsTable({ data, onReview }: { data: PortfolioDashboardData; onReview: (importJob: ImportJob) => Promise<void> }) {
+  return (
+    <section className="bg-surface-1 border border-border/70 rounded-2xl p-5 flex flex-col gap-4 shadow-[0_14px_36px_oklch(0_0_0/0.22)]">
+      <div>
+        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Importaciones recientes</p>
+        <p className="text-[11px] text-muted-foreground mt-1">Cada import se revisa por separado para evitar filas mezcladas.</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs min-w-[760px]">
+          <thead>
+            <tr className="border-b border-border/40">
+              <th className="text-left pb-2.5 text-muted-foreground font-medium">Fecha</th>
+              <th className="text-left pb-2.5 text-muted-foreground font-medium">Tipo</th>
+              <th className="text-left pb-2.5 text-muted-foreground font-medium">Fuente</th>
+              <th className="text-right pb-2.5 text-muted-foreground font-medium">Filas</th>
+              <th className="text-right pb-2.5 text-muted-foreground font-medium">Estado</th>
+              <th className="text-right pb-2.5 text-muted-foreground font-medium">Revision</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.imports.length > 0 ? data.imports.map((item) => (
+              <tr key={item.id} className="border-b border-border/20">
+                <td className="py-3 text-muted-foreground">{new Date(item.created_at).toLocaleString('es-ES')}</td>
+                <td className="py-3 text-foreground">{getImportTypeLabel(item)}</td>
+                <td className="py-3 text-muted-foreground">{item.source_name}</td>
+                <td className="py-3 text-right text-muted-foreground">{item.parsed_rows ?? 0}</td>
+                <td className="py-3 text-right text-foreground">{getDisplayImportStatus(item.id, item.status, data.importRows)}</td>
+                <td className="py-3 text-right">
+                  <button onClick={() => onReview(item)} className="inline-flex items-center gap-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 px-2.5 py-1.5 text-xs font-semibold">
+                    <Eye className="w-3.5 h-3.5" /> Revisar
+                  </button>
+                </td>
+              </tr>
+            )) : (
+              <tr>
+                <td colSpan={6} className="py-10 text-center text-muted-foreground">No hay importaciones todavia.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
   )
 }
 
@@ -378,149 +821,6 @@ function ImagePanel({ onSubmit }: { onSubmit: (event: FormEvent<HTMLFormElement>
   )
 }
 
-function ImportsTable({
-  data,
-  onAccept,
-  onReject,
-}: {
-  data: PortfolioDashboardData
-  onAccept: (id: string, rowIds?: string[]) => Promise<void>
-  onReject: (id: string, rowIds?: string[]) => Promise<void>
-}) {
-  return (
-    <section className="bg-surface-1 border border-border/70 rounded-2xl p-5 flex flex-col gap-4 shadow-[0_14px_36px_oklch(0_0_0/0.22)]">
-      <div>
-        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Importaciones recientes</p>
-        <p className="text-[11px] text-muted-foreground mt-1">
-          Staging: {data.diagnostics.validImportRows} validas pendientes, {data.diagnostics.invalidImportRows} invalidas o rechazadas.
-        </p>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs min-w-[760px]">
-          <thead>
-            <tr className="border-b border-border/40">
-              <th className="text-left pb-2.5 text-muted-foreground font-medium">Fecha</th>
-              <th className="text-left pb-2.5 text-muted-foreground font-medium">Tipo</th>
-              <th className="text-left pb-2.5 text-muted-foreground font-medium">Fuente</th>
-              <th className="text-right pb-2.5 text-muted-foreground font-medium">Filas</th>
-              <th className="text-right pb-2.5 text-muted-foreground font-medium">Estado</th>
-              <th className="text-right pb-2.5 text-muted-foreground font-medium">Gestion</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.imports.length > 0 ? data.imports.map((item) => (
-              <tr key={item.id} className="border-b border-border/20">
-                <td className="py-3 text-muted-foreground">{new Date(item.created_at).toLocaleString('es-ES')}</td>
-                <td className="py-3 text-foreground">{getImportTypeLabel(item)}</td>
-                <td className="py-3 text-muted-foreground">{item.source_name}</td>
-                <td className="py-3 text-right text-muted-foreground">{item.parsed_rows ?? 0}</td>
-                <td className="py-3 text-right text-foreground">{getDisplayImportStatus(item.id, item.status, data.importRows)}</td>
-                <td className="py-3 text-right">
-                  <RowActions onAccept={() => onAccept(item.id)} onReject={() => onReject(item.id)} />
-                </td>
-              </tr>
-            )) : (
-              <tr>
-                <td colSpan={6} className="py-10 text-center text-muted-foreground">No hay importaciones todavia.</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  )
-}
-
-function StagingTable({
-  rows,
-  onAccept,
-  onReject,
-}: {
-  rows: ImportRow[]
-  onAccept: (id: string, rowIds?: string[]) => Promise<void>
-  onReject: (id: string, rowIds?: string[]) => Promise<void>
-}) {
-  return (
-    <section className="bg-surface-1 border border-border/70 rounded-2xl p-5 flex flex-col gap-4 shadow-[0_14px_36px_oklch(0_0_0/0.22)]">
-      <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Revision de staging</p>
-      <div className="overflow-x-auto">
-        <table className="w-full text-xs min-w-[1120px]">
-          <thead>
-            <tr className="border-b border-border/40">
-              <th className="text-left pb-2.5 text-muted-foreground font-medium">Fila</th>
-              <th className="text-left pb-2.5 text-muted-foreground font-medium">Fecha</th>
-              <th className="text-left pb-2.5 text-muted-foreground font-medium">ISIN</th>
-              <th className="text-left pb-2.5 text-muted-foreground font-medium">Fondo</th>
-              <th className="text-left pb-2.5 text-muted-foreground font-medium">Tipo</th>
-              <th className="text-right pb-2.5 text-muted-foreground font-medium">Importe</th>
-              <th className="text-right pb-2.5 text-muted-foreground font-medium">Particip.</th>
-              <th className="text-right pb-2.5 text-muted-foreground font-medium">NAV</th>
-              <th className="text-right pb-2.5 text-muted-foreground font-medium">Conf.</th>
-              <th className="text-left pb-2.5 text-muted-foreground font-medium">Estado</th>
-              <th className="text-right pb-2.5 text-muted-foreground font-medium">Accion</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length > 0 ? rows.map((row) => (
-              <ImportRowItem key={row.id} row={row} onAccept={onAccept} onReject={onReject} />
-            )) : (
-              <tr>
-                <td colSpan={11} className="py-10 text-center text-muted-foreground">No hay filas de staging.</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  )
-}
-
-function ImportRowItem({
-  row,
-  onAccept,
-  onReject,
-}: {
-  row: ImportRow
-  onAccept: (id: string, rowIds?: string[]) => Promise<void>
-  onReject: (id: string, rowIds?: string[]) => Promise<void>
-}) {
-  return (
-    <tr className="border-b border-border/20">
-      <td className="py-3 text-muted-foreground">#{row.row_index}</td>
-      <td className="py-3 text-muted-foreground">{row.detected_trade_date ?? 'N/D'}</td>
-      <td className="py-3 font-semibold text-foreground">{row.detected_isin ?? 'N/D'}</td>
-      <td className="py-3 text-muted-foreground max-w-[260px] truncate">{row.detected_fund_name ?? 'N/D'}</td>
-      <td className="py-3 text-muted-foreground">{row.detected_transaction_type ?? 'N/D'}</td>
-      <td className="py-3 text-right text-muted-foreground">{formatNumber(row.detected_amount)}</td>
-      <td className="py-3 text-right text-muted-foreground">{formatNumber(row.detected_shares, 4)}</td>
-      <td className="py-3 text-right text-muted-foreground">{formatNumber(row.detected_nav, 4)}</td>
-      <td className="py-3 text-right text-muted-foreground">{row.confidence != null ? `${Math.round(Number(row.confidence) * 100)}%` : 'N/D'}</td>
-      <td className="py-3">
-        <div className="flex flex-col gap-1">
-          <StatusPill status={row.validation_status} />
-          {row.validation_error ? <span className="text-[10px] text-loss max-w-[280px]">{row.validation_error}</span> : null}
-        </div>
-      </td>
-      <td className="py-3 text-right">
-        <RowActions onAccept={() => onAccept(row.import_id, [row.id])} onReject={() => onReject(row.import_id, [row.id])} />
-      </td>
-    </tr>
-  )
-}
-
-function RowActions({ onAccept, onReject }: { onAccept: () => void; onReject: () => void }) {
-  return (
-    <div className="flex justify-end gap-2">
-      <button onClick={onAccept} className="p-1.5 rounded-lg bg-gain-muted text-gain" aria-label="Aceptar">
-        <CheckCircle2 className="w-3.5 h-3.5" />
-      </button>
-      <button onClick={onReject} className="p-1.5 rounded-lg bg-loss-muted text-loss" aria-label="Rechazar">
-        <XCircle className="w-3.5 h-3.5" />
-      </button>
-    </div>
-  )
-}
-
 function StatusPill({ status }: { status: string }) {
   return (
     <span
@@ -535,6 +835,19 @@ function StatusPill({ status }: { status: string }) {
       {status === 'valid' ? <CircleDashed className="w-3 h-3" /> : null}
       {status}
     </span>
+  )
+}
+
+function TransactionTypeOptions() {
+  return (
+    <>
+      <option value="buy">Compra</option>
+      <option value="sell">Venta</option>
+      <option value="transfer_in">Traspaso entrada</option>
+      <option value="transfer_out">Traspaso salida</option>
+      <option value="switch_in">Switch entrada</option>
+      <option value="switch_out">Switch salida</option>
+    </>
   )
 }
 
@@ -571,4 +884,16 @@ function getImportTypeLabel(importJob: ImportJob) {
 function formatNumber(value: number | null, digits = 2) {
   if (value == null) return 'N/D'
   return Number(value).toLocaleString('es-ES', { maximumFractionDigits: digits })
+}
+
+function countRows(rows: ImportRow[], status: ImportRow['validation_status']) {
+  return rows.filter((row) => row.validation_status === status).length
+}
+
+function dedupeRows(rows: ImportRow[]) {
+  const byKey = new Map<string, ImportRow>()
+  for (const row of rows) {
+    byKey.set(`${row.import_id}:${row.row_index}`, row)
+  }
+  return Array.from(byKey.values()).sort((a, b) => a.row_index - b.row_index)
 }
