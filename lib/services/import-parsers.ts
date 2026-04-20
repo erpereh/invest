@@ -41,6 +41,10 @@ export function parseManualRows(rows: unknown) {
 
 export function parseCsv(content: string) {
   const cleanContent = stripBom(content)
+  if (isMyInvestorCsv(cleanContent)) {
+    return parseMyInvestorCsv(cleanContent)
+  }
+
   const result = Papa.parse<Record<string, unknown>>(cleanContent, {
     delimiter: detectDelimiter(cleanContent),
     header: true,
@@ -53,6 +57,23 @@ export function parseCsv(content: string) {
   }
 
   return result.data.map((row, index) => normalizeRawRow(row, index + 1)).filter(Boolean) as NormalizedImportRow[]
+}
+
+export function parseMyInvestorCsv(content: string) {
+  const result = Papa.parse<Record<string, unknown>>(stripBom(content), {
+    delimiter: ';',
+    header: true,
+    skipEmptyLines: true,
+    transformHeader: (header) => normalizeHeader(header),
+  })
+
+  if (result.errors.length > 0) {
+    throw new Error(result.errors[0]?.message ?? 'No se pudo parsear el CSV de MyInvestor.')
+  }
+
+  return result.data
+    .map((raw, index) => normalizeMyInvestorRow(raw, index + 1))
+    .filter(Boolean) as NormalizedImportRow[]
 }
 
 export function parseExcel(buffer: ArrayBuffer) {
@@ -151,6 +172,33 @@ function normalizeRawRow(raw: Record<string, unknown>, rowIndex: number): Normal
   }
 }
 
+function normalizeMyInvestorRow(raw: Record<string, unknown>, rowIndex: number): NormalizedImportRow | null {
+  const row = normalizeKeys(raw)
+  const isin = pick(row, ['isin']) ?? extractIsin(Object.values(row).join(' '))
+  const tradeDate = normalizeDate(pick(row, ['fecha_de_la_orden']))
+  const amount = parseNumber(pick(row, ['importe_estimado']))
+  const shares = parseNumber(pick(row, ['n_de_participaciones']))
+  const status = pick(row, ['estado'])
+  const finalized = normalizeHeader(status ?? '') === 'finalizada'
+
+  if (!isin && !tradeDate && !amount && !shares) return null
+
+  return {
+    fund_name: null,
+    isin,
+    transaction_type: 'buy',
+    trade_date: tradeDate,
+    amount_eur: amount,
+    shares,
+    nav: null,
+    confidence: finalized ? 0.98 : 0.6,
+    notes: `MyInvestor CSV fila ${rowIndex}`,
+    raw,
+    source_format: 'myinvestor_orders_csv',
+    validation_error: finalized ? null : `Estado no finalizado: ${status ?? 'N/D'}.`,
+  }
+}
+
 function normalizeKeys(raw: Record<string, unknown>) {
   return Object.fromEntries(Object.entries(raw).map(([key, value]) => [normalizeHeader(key), value]))
 }
@@ -214,6 +262,14 @@ function normalizeDate(value: string | null) {
 
 function stripBom(content: string) {
   return content.replace(/^\uFEFF/, '')
+}
+
+function isMyInvestorCsv(content: string) {
+  const firstLine = content.split(/\r?\n/).find((line) => line.trim().length > 0) ?? ''
+  const headers = firstLine.split(';').map((header) => normalizeHeader(header))
+  return ['fecha_de_la_orden', 'isin', 'importe_estimado', 'n_de_participaciones', 'estado'].every((header) =>
+    headers.includes(header)
+  )
 }
 
 function detectDelimiter(content: string) {

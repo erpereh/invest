@@ -18,15 +18,20 @@ export async function POST(request: Request) {
     }
 
     const rows = isExcel ? parseExcel(await file.arrayBuffer()) : parseCsv(await file.text())
+    const detectedFormat = rows.some((row) => row.source_format === 'myinvestor_orders_csv')
+      ? 'MyInvestor CSV'
+      : isExcel
+        ? 'Excel'
+        : 'CSV'
     const result = await createImportWithRows({
       importType: isExcel ? 'excel' : 'csv',
       sourceName: 'MyInvestor',
       originalFilename: file.name,
-      rawJson: { file_name: file.name, file_size: file.size },
+      rawJson: { file_name: file.name, file_size: file.size, detected_format: detectedFormat },
       rows,
     })
 
-    return NextResponse.json({ ok: true, ...result })
+    return NextResponse.json({ ok: true, detectedFormat, ...result })
   } catch (error) {
     return NextResponse.json({ ok: false, error: getErrorMessage(error) }, { status: 400 })
   }

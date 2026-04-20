@@ -1,5 +1,6 @@
 import { createServiceSupabaseClient } from '@/lib/supabase/server'
 import type { ImportRow, TransactionType } from '@/lib/supabase/types'
+import { resolveFundByIsin } from '@/lib/data/funds'
 import { normalizeIsin } from '@/lib/data/format'
 import { recalculateHoldings } from '@/lib/services/holdings'
 
@@ -14,6 +15,8 @@ export interface NormalizedImportRow {
   confidence?: number | null
   notes?: string | null
   raw?: Record<string, unknown> | null
+  source_format?: string | null
+  validation_error?: string | null
 }
 
 interface ImportTransactionResult {
@@ -52,7 +55,9 @@ export async function createImportWithRows(input: {
 
   if (importError) throw new Error(importError.message)
 
-  const rows = input.rows.map((row, index) => {
+  const resolvedRows = await Promise.all(input.rows.map(resolveImportRowFund))
+
+  const rows = resolvedRows.map((row, index) => {
     const validation = validateDetectedRow(row)
     return {
       import_id: importJob.id,
@@ -69,6 +74,7 @@ export async function createImportWithRows(input: {
         ...row,
         parser_version: 2,
         raw: row.raw ?? null,
+        source_format: row.source_format ?? null,
       },
       validation_status: validation.ok ? 'valid' : 'invalid',
       validation_error: validation.error,
@@ -194,6 +200,7 @@ export async function rejectImportRows(importId: string, rowIds?: string[]) {
 }
 
 function validateDetectedRow(row: NormalizedImportRow) {
+  if (row.validation_error) return { ok: false, error: row.validation_error }
   if (!row.isin || !/^[A-Z]{2}[A-Z0-9]{9}[0-9]$/i.test(row.isin.trim())) {
     return { ok: false, error: 'ISIN ausente o invalido.' }
   }
@@ -203,6 +210,26 @@ function validateDetectedRow(row: NormalizedImportRow) {
   if (row.shares == null || row.shares <= 0) return { ok: false, error: 'Participaciones invalidas.' }
   if (row.nav != null && row.nav <= 0) return { ok: false, error: 'NAV invalido.' }
   return { ok: true, error: null }
+}
+
+async function resolveImportRowFund(row: NormalizedImportRow): Promise<NormalizedImportRow> {
+  if (!row.isin) return row
+
+  try {
+    const fund = await resolveFundByIsin(row.isin)
+    if (!fund) return row
+    return {
+      ...row,
+      isin: fund.isin,
+      fund_name: row.fund_name || fund.name,
+    }
+  } catch (error) {
+    console.warn('[imports] fund resolution failed', {
+      isin: row.isin,
+      error: error instanceof Error ? error.message : 'Error desconocido.',
+    })
+    return row
+  }
 }
 
 function isValidDetectedRow(row: NormalizedImportRow) {
@@ -226,9 +253,9 @@ async function insertTransactionFromImportRow(importId: string, row: ImportRow):
     return { rowId: row.id, status: 'invalid', error: 'Fila incompleta.' }
   }
 
-  const [{ data: account }, { data: fund }] = await Promise.all([
+  const [{ data: account }, fund] = await Promise.all([
     supabase.from('accounts').select('id').eq('active', true).order('created_at').limit(1).maybeSingle(),
-    supabase.from('funds').select('id').eq('isin', normalizeIsin(row.detected_isin)).maybeSingle(),
+    resolveFundByIsin(row.detected_isin),
   ])
 
   if (!account || !fund) {
