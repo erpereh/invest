@@ -3,6 +3,7 @@
 import { FormEvent, useState } from 'react'
 import { FileSpreadsheet, Image, Keyboard, Upload, CheckCircle2, XCircle } from 'lucide-react'
 import type { PortfolioDashboardData } from '@/lib/data/portfolio'
+import type { ImportRow } from '@/lib/supabase/types'
 
 export function ImportarPage({ data }: { data: PortfolioDashboardData }) {
   const [status, setStatus] = useState<string | null>(null)
@@ -61,17 +62,25 @@ export function ImportarPage({ data }: { data: PortfolioDashboardData }) {
     window.location.reload()
   }
 
-  async function acceptImport(id: string) {
+  async function acceptImport(id: string, rowIds?: string[]) {
     setStatus('Aceptando filas validas...')
-    const response = await fetch(`/api/imports/${id}/accept`, { method: 'POST' })
+    const response = await fetch(`/api/imports/${id}/accept`, {
+      method: 'POST',
+      headers: rowIds ? { 'Content-Type': 'application/json' } : undefined,
+      body: rowIds ? JSON.stringify({ rowIds }) : undefined,
+    })
     const result = await response.json()
-    setStatus(result.ok ? `Filas aceptadas: ${result.accepted}` : result.error)
+    setStatus(result.ok ? `Filas aceptadas: ${result.accepted}. Creadas: ${result.created}. Duplicadas: ${result.duplicates}. Invalidas: ${result.invalid}.` : result.error)
     if (result.ok) window.location.reload()
   }
 
-  async function rejectImport(id: string) {
+  async function rejectImport(id: string, rowIds?: string[]) {
     setStatus('Rechazando filas...')
-    const response = await fetch(`/api/imports/${id}/reject`, { method: 'POST' })
+    const response = await fetch(`/api/imports/${id}/reject`, {
+      method: 'POST',
+      headers: rowIds ? { 'Content-Type': 'application/json' } : undefined,
+      body: rowIds ? JSON.stringify({ rowIds }) : undefined,
+    })
     const result = await response.json()
     setStatus(result.ok ? `Filas rechazadas: ${result.rejected}` : result.error)
     if (result.ok) window.location.reload()
@@ -132,7 +141,14 @@ export function ImportarPage({ data }: { data: PortfolioDashboardData }) {
       </div>
 
       <div className="bg-surface-1 border border-border/70 rounded-2xl p-5 flex flex-col gap-4 shadow-[0_14px_36px_oklch(0_0_0/0.22)]">
-        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Importaciones recientes</p>
+        <div>
+          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Importaciones recientes</p>
+          {data.diagnostics.invalidImportRows > 0 || data.diagnostics.validImportRows > 0 ? (
+            <p className="text-[11px] text-muted-foreground mt-1">
+              Staging: {data.diagnostics.validImportRows} validas pendientes, {data.diagnostics.invalidImportRows} invalidas o rechazadas.
+            </p>
+          ) : null}
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-xs min-w-[720px]">
             <thead>
@@ -152,7 +168,7 @@ export function ImportarPage({ data }: { data: PortfolioDashboardData }) {
                   <td className="py-3 text-foreground">{item.import_type}</td>
                   <td className="py-3 text-muted-foreground">{item.source_name}</td>
                   <td className="py-3 text-right text-muted-foreground">{item.parsed_rows ?? 0}</td>
-                  <td className="py-3 text-right text-foreground">{item.status}</td>
+                  <td className="py-3 text-right text-foreground">{getDisplayImportStatus(item.id, item.status, data.importRows)}</td>
                   <td className="py-3 text-right">
                     <div className="flex justify-end gap-2">
                       <button onClick={() => acceptImport(item.id)} className="p-1.5 rounded-lg bg-gain-muted text-gain" aria-label="Aceptar filas">
@@ -173,8 +189,85 @@ export function ImportarPage({ data }: { data: PortfolioDashboardData }) {
           </table>
         </div>
       </div>
+
+      <div className="bg-surface-1 border border-border/70 rounded-2xl p-5 flex flex-col gap-4 shadow-[0_14px_36px_oklch(0_0_0/0.22)]">
+        <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Filas de staging</p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs min-w-[980px]">
+            <thead>
+              <tr className="border-b border-border/40">
+                <th className="text-left pb-2.5 text-muted-foreground font-medium">Fila</th>
+                <th className="text-left pb-2.5 text-muted-foreground font-medium">ISIN</th>
+                <th className="text-left pb-2.5 text-muted-foreground font-medium">Tipo</th>
+                <th className="text-left pb-2.5 text-muted-foreground font-medium">Fecha</th>
+                <th className="text-right pb-2.5 text-muted-foreground font-medium">Importe</th>
+                <th className="text-right pb-2.5 text-muted-foreground font-medium">Particip.</th>
+                <th className="text-right pb-2.5 text-muted-foreground font-medium">NAV</th>
+                <th className="text-left pb-2.5 text-muted-foreground font-medium">Estado</th>
+                <th className="text-right pb-2.5 text-muted-foreground font-medium">Accion</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.importRows.length > 0 ? data.importRows.map((row) => (
+                <ImportRowItem key={row.id} row={row} onAccept={acceptImport} onReject={rejectImport} />
+              )) : (
+                <tr>
+                  <td colSpan={9} className="py-10 text-center text-muted-foreground">No hay filas de staging.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   )
+}
+
+function ImportRowItem({
+  row,
+  onAccept,
+  onReject,
+}: {
+  row: ImportRow
+  onAccept: (id: string, rowIds?: string[]) => Promise<void>
+  onReject: (id: string, rowIds?: string[]) => Promise<void>
+}) {
+  return (
+    <tr className="border-b border-border/20">
+      <td className="py-3 text-muted-foreground">#{row.row_index}</td>
+      <td className="py-3 font-semibold text-foreground">{row.detected_isin ?? 'N/D'}</td>
+      <td className="py-3 text-muted-foreground">{row.detected_transaction_type ?? 'N/D'}</td>
+      <td className="py-3 text-muted-foreground">{row.detected_trade_date ?? 'N/D'}</td>
+      <td className="py-3 text-right text-muted-foreground">{row.detected_amount ?? 'N/D'}</td>
+      <td className="py-3 text-right text-muted-foreground">{row.detected_shares ?? 'N/D'}</td>
+      <td className="py-3 text-right text-muted-foreground">{row.detected_nav ?? 'N/D'}</td>
+      <td className="py-3">
+        <div className="flex flex-col gap-1">
+          <span className="text-foreground">{row.validation_status}</span>
+          {row.validation_error ? <span className="text-[10px] text-loss max-w-[260px]">{row.validation_error}</span> : null}
+        </div>
+      </td>
+      <td className="py-3 text-right">
+        <div className="flex justify-end gap-2">
+          <button onClick={() => onAccept(row.import_id, [row.id])} className="p-1.5 rounded-lg bg-gain-muted text-gain" aria-label="Aceptar fila">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={() => onReject(row.import_id, [row.id])} className="p-1.5 rounded-lg bg-loss-muted text-loss" aria-label="Rechazar fila">
+            <XCircle className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </td>
+    </tr>
+  )
+}
+
+function getDisplayImportStatus(importId: string, storedStatus: string, rows: ImportRow[]) {
+  const ownRows = rows.filter((row) => row.import_id === importId)
+  if (ownRows.length === 0) return storedStatus
+  if (ownRows.some((row) => row.validation_status === 'accepted')) return 'imported'
+  if (ownRows.some((row) => row.validation_status === 'valid')) return 'parsed'
+  if (ownRows.every((row) => row.validation_status === 'invalid' || row.validation_status === 'rejected')) return 'failed'
+  return storedStatus
 }
 
 function Panel({ icon: Icon, title, children }: { icon: React.ElementType; title: string; children: React.ReactNode }) {

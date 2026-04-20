@@ -43,7 +43,7 @@ export function CarteraPage({ data }: CarteraPageProps) {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2">
-          <PosicionesCard holdings={data.holdings} />
+          <PosicionesCard holdings={data.holdings} diagnostics={data.diagnostics} />
         </div>
         <div>
           <DistribucionCard data={data} />

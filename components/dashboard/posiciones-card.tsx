@@ -3,13 +3,15 @@
 import { ArrowUpRight, ArrowDownRight, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { CurrentHolding } from '@/lib/supabase/types'
+import type { PortfolioDashboardData } from '@/lib/data/portfolio'
 import { formatCurrency, formatPercent, fundInitials } from '@/lib/data/format'
 
 interface PosicionesCardProps {
   holdings: CurrentHolding[]
+  diagnostics?: PortfolioDashboardData['diagnostics']
 }
 
-export function PosicionesCard({ holdings }: PosicionesCardProps) {
+export function PosicionesCard({ holdings, diagnostics }: PosicionesCardProps) {
   return (
     <div className="bg-surface-1 border border-border/70 rounded-2xl p-5 flex flex-col gap-4 shadow-[0_14px_36px_oklch(0_0_0/0.22)] transition-[background-color,border-color,box-shadow,transform] duration-200 ease-out hover:-translate-y-0.5 hover:border-border hover:shadow-[0_18px_44px_oklch(0_0_0/0.3)]">
       <div className="flex items-center justify-between">
@@ -74,7 +76,11 @@ export function PosicionesCard({ holdings }: PosicionesCardProps) {
             }) : (
               <tr>
                 <td colSpan={7} className="py-10 text-center text-muted-foreground">
-                  No hay posiciones. Importa movimientos y NAVs para empezar.
+                  {diagnostics?.transactionCount
+                    ? 'Hay movimientos, pero aun no hay snapshots valorados. Recalcula holdings o revisa NAVs disponibles.'
+                    : diagnostics?.validImportRows
+                      ? 'Hay filas validas en staging pendientes de aceptar.'
+                      : 'No hay posiciones. Importa movimientos y NAVs para empezar.'}
                 </td>
               </tr>
             )}

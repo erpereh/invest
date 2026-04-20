@@ -4,6 +4,7 @@ import type {
   CurrentHolding,
   Fund,
   ImportJob,
+  ImportRow,
   LatestFundNav,
   PortfolioDistribution,
   PortfolioSummary,
@@ -36,6 +37,13 @@ export interface PortfolioDashboardData {
   funds: Fund[]
   accounts: Account[]
   imports: ImportJob[]
+  importRows: ImportRow[]
+  diagnostics: {
+    transactionCount: number
+    holdingsDailyCount: number
+    invalidImportRows: number
+    validImportRows: number
+  }
   groupedDistribution: {
     funds: DistributionSlice[]
     regions: DistributionSlice[]
@@ -66,6 +74,13 @@ export function getEmptyDashboardData(error?: string): PortfolioDashboardData {
     funds: [],
     accounts: [],
     imports: [],
+    importRows: [],
+    diagnostics: {
+      transactionCount: 0,
+      holdingsDailyCount: 0,
+      invalidImportRows: 0,
+      validImportRows: 0,
+    },
     groupedDistribution: {
       funds: [],
       regions: [],
@@ -91,6 +106,9 @@ export async function getPortfolioDashboardData(): Promise<PortfolioDashboardDat
     fundsResult,
     accountsResult,
     importsResult,
+    importRowsResult,
+    transactionsCountResult,
+    holdingsCountResult,
   ] = await Promise.all([
     supabase.from('portfolio_summary').select('*').maybeSingle(),
     supabase.from('portfolio_distribution').select('*').order('portfolio_weight_pct', { ascending: false }),
@@ -101,6 +119,9 @@ export async function getPortfolioDashboardData(): Promise<PortfolioDashboardDat
     supabase.from('funds').select('*').order('name'),
     supabase.from('accounts').select('*').order('name'),
     supabase.from('imports').select('*').order('created_at', { ascending: false }).limit(20),
+    supabase.from('import_rows').select('*').order('created_at', { ascending: false }).limit(80),
+    supabase.from('transactions').select('id', { count: 'exact', head: true }),
+    supabase.from('holdings_daily').select('id', { count: 'exact', head: true }),
   ])
 
   const firstError =
@@ -112,7 +133,10 @@ export async function getPortfolioDashboardData(): Promise<PortfolioDashboardDat
     evolutionResult.error ??
     fundsResult.error ??
     accountsResult.error ??
-    importsResult.error
+    importsResult.error ??
+    importRowsResult.error ??
+    transactionsCountResult.error ??
+    holdingsCountResult.error
 
   if (firstError) {
     return getEmptyDashboardData(firstError.message)
@@ -120,6 +144,7 @@ export async function getPortfolioDashboardData(): Promise<PortfolioDashboardDat
 
   const holdings = holdingsResult.data ?? []
   const distribution = distributionResult.data ?? []
+  const importRows = importRowsResult.data ?? []
 
   return {
     configured: true,
@@ -132,6 +157,13 @@ export async function getPortfolioDashboardData(): Promise<PortfolioDashboardDat
     funds: fundsResult.data ?? [],
     accounts: accountsResult.data ?? [],
     imports: importsResult.data ?? [],
+    importRows,
+    diagnostics: {
+      transactionCount: transactionsCountResult.count ?? transactionsResult.data?.length ?? 0,
+      holdingsDailyCount: holdingsCountResult.count ?? evolutionResult.data?.length ?? 0,
+      invalidImportRows: importRows.filter((row) => row.validation_status === 'invalid' || row.validation_status === 'rejected').length,
+      validImportRows: importRows.filter((row) => row.validation_status === 'valid').length,
+    },
     groupedDistribution: {
       funds: distribution.map((item) => ({
         name: item.isin,

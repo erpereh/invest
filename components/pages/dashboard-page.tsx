@@ -32,14 +32,14 @@ export function DashboardPage({ data }: DashboardPageProps) {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2">
-          <PosicionesCard holdings={data.holdings} />
+          <PosicionesCard holdings={data.holdings} diagnostics={data.diagnostics} />
         </div>
         <div>
           <InsightsCard data={data} />
         </div>
       </div>
 
-      <TransaccionesCard transactions={data.recentTransactions} funds={data.funds} accounts={data.accounts} />
+      <TransaccionesCard transactions={data.recentTransactions} funds={data.funds} accounts={data.accounts} diagnostics={data.diagnostics} />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <MejoresPeoresCard holdings={data.holdings} />

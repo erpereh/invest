@@ -4,6 +4,7 @@ import { FormEvent, useMemo, useState } from 'react'
 import { Search, Plus, ArrowUpCircle, ArrowDownCircle, ArrowDownToLine, ArrowUpFromLine, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { Account, Fund, RecentTransaction, TransactionType } from '@/lib/supabase/types'
+import type { PortfolioDashboardData } from '@/lib/data/portfolio'
 import { formatCurrency, transactionTypeLabel } from '@/lib/data/format'
 
 const typeFilters = ['Todas', ...Object.values(transactionTypeLabel)]
@@ -21,9 +22,10 @@ interface TransaccionesCardProps {
   transactions: RecentTransaction[]
   funds: Fund[]
   accounts: Account[]
+  diagnostics?: PortfolioDashboardData['diagnostics']
 }
 
-export function TransaccionesCard({ transactions, funds, accounts }: TransaccionesCardProps) {
+export function TransaccionesCard({ transactions, funds, accounts, diagnostics }: TransaccionesCardProps) {
   const [activeFilter, setActiveFilter] = useState('Todas')
   const [search, setSearch] = useState('')
   const [showForm, setShowForm] = useState(false)
@@ -149,7 +151,13 @@ export function TransaccionesCard({ transactions, funds, accounts }: Transaccion
               )
             }) : (
               <tr>
-                <td colSpan={6} className="py-10 text-center text-muted-foreground">No hay movimientos reales todavia.</td>
+                <td colSpan={6} className="py-10 text-center text-muted-foreground">
+                  {diagnostics?.validImportRows
+                    ? 'Hay filas validas en staging pendientes de aceptar.'
+                    : diagnostics?.invalidImportRows
+                      ? 'Hay imports en staging con errores de validacion.'
+                      : 'No hay movimientos reales todavia.'}
+                </td>
               </tr>
             )}
           </tbody>
